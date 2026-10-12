@@ -1,0 +1,30 @@
+{
+  "name": "3d-spawn-oyunu",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "3D survivors-like (Vampire Survivors / Megabonk tarzı) tarayıcı oyunu — Three.js + TypeScript",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check .",
+    "format": "biome check --write .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "simplex-noise": "4.0.3",
+    "three": "0.186.1"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.15",
+    "@playwright/test": "1.56.1",
+    "@types/three": "0.186.0",
+    "typescript": "5.9.3",
+    "vite": "8.3.4",
+    "vitest": "5.0.4"
+  }
+}
