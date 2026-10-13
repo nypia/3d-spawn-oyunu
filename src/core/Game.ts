@@ -7,6 +7,7 @@ import { describeUpgrade } from '../sim/progression/Upgrades';
 import { World } from '../sim/world/World';
 import { Hud } from '../ui/Hud';
 import { Screens } from '../ui/Screens';
+import { type Flags, readFlags } from './flags';
 import { Input } from './Input';
 import { randomSeed } from './Rng';
 
@@ -28,21 +29,21 @@ export class Game {
   private readonly screens: Screens;
   private readonly debug: DebugOverlay | null;
   private readonly quality: QualitySettings;
-  private readonly params: URLSearchParams;
+  private readonly flags: Flags;
   private readonly simInput: PlayerInput = { moveX: 0, moveZ: 0, jump: false, slide: false };
   private acc = 0;
   private lastHp = 0;
   private last = performance.now();
 
   constructor(root: HTMLElement) {
-    this.params = new URLSearchParams(location.search);
-    this.quality = detectQuality(this.params);
-    const bench = Number(this.params.get('bench') ?? 0);
+    this.flags = readFlags(location.search, location.hash);
+    this.quality = detectQuality(this.flags.quality);
+    const bench = this.flags.bench;
     this.renderer = new Renderer3D(root, this.quality, Math.max(1200, bench));
     this.input = new Input(this.renderer.canvas);
     this.hud = new Hud(root);
     this.screens = new Screens(root);
-    this.debug = this.params.has('debug') || bench > 0 ? new DebugOverlay(root) : null;
+    this.debug = this.flags.debug || bench > 0 ? new DebugOverlay(root) : null;
 
     this.world = this.createWorld();
     this.bindKeys();
@@ -68,10 +69,9 @@ export class Game {
   }
 
   private createWorld(): World {
-    const seedParam = this.params.get('seed');
-    const bench = Number(this.params.get('bench') ?? 0);
+    const bench = this.flags.bench;
     const world = new World({
-      seed: seedParam ? Number(seedParam) : randomSeed(),
+      seed: this.flags.seed ?? randomSeed(),
       enemyCap: Math.max(this.quality.enemyCap, bench),
       godMode: bench > 0,
     });
@@ -81,8 +81,7 @@ export class Game {
 
   private startRun(): void {
     if (this.world.time > 0) this.world = this.createWorld();
-    const bench = Number(this.params.get('bench') ?? 0);
-    if (bench > 0) this.world.spawnBurst(bench, 6, 45);
+    if (this.flags.bench > 0) this.world.spawnBurst(this.flags.bench, 6, 45);
     this.lastHp = this.world.player.hp;
     this.acc = 0;
     this.input.clear();

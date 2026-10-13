@@ -31,9 +31,8 @@ export function isTouchDevice(): boolean {
   return typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches === true;
 }
 
-/** Varsayılan kalite: dokunmatik cihazda düşük, aksi halde yüksek. `?quality=low|high` ile zorlanabilir. */
-export function detectQuality(params: URLSearchParams): QualitySettings {
-  const q = params.get('quality');
+/** Varsayılan kalite: dokunmatik cihazda düşük, aksi halde yüksek. `?quality=` ya da `#low/#high` ile zorlanabilir. */
+export function detectQuality(q: 'low' | 'high' | null): QualitySettings {
   if (q === 'low') return QUALITY_LOW;
   if (q === 'high') return QUALITY_HIGH;
   return isTouchDevice() ? QUALITY_LOW : QUALITY_HIGH;

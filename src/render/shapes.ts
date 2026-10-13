@@ -1,5 +1,5 @@
 import {
-  type BufferGeometry,
+  BufferGeometry,
   CapsuleGeometry,
   ConeGeometry,
   CylinderGeometry,
@@ -9,7 +9,6 @@ import {
   OctahedronGeometry,
   SphereGeometry,
 } from 'three';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 /**
  * Yer tutucu low-poly modeller (M3'te Kenney/Quaternius modelleriyle değişecek).
@@ -35,9 +34,24 @@ function paint(geo: BufferGeometry, color: number): BufferGeometry {
   return g;
 }
 
+/** Boyanmış (non-indexed) parçaların position/normal/color dizilerini uç uca ekler. */
+function mergeColored(geos: BufferGeometry[]): BufferGeometry {
+  const merged = new BufferGeometry();
+  for (const name of ['position', 'normal', 'color']) {
+    const arrays = geos.map((g) => g.getAttribute(name).array as Float32Array);
+    const out = new Float32Array(arrays.reduce((n, a) => n + a.length, 0));
+    let offset = 0;
+    for (const a of arrays) {
+      out.set(a, offset);
+      offset += a.length;
+    }
+    merged.setAttribute(name, new Float32BufferAttribute(out, 3));
+  }
+  return merged;
+}
+
 function build(parts: Part[]): BufferGeometry {
-  const merged = mergeGeometries(parts.map(([g, c]) => paint(g, c)));
-  if (!merged) throw new Error('geometri birleştirilemedi');
+  const merged = mergeColored(parts.map(([g, c]) => paint(g, c)));
   merged.computeVertexNormals();
   return merged;
 }
