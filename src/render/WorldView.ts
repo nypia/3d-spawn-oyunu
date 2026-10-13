@@ -19,7 +19,6 @@ import { OBSTACLE_ROCK, OBSTACLE_TREE } from '../sim/world/Obstacles';
 import type { World } from '../sim/world/World';
 import {
   batGeometry,
-  boltGeometry,
   gemGeometry,
   puffGeometry,
   rockGeometry,
@@ -60,6 +59,8 @@ interface Puff {
   z: number;
   t: number;
   color: number;
+  /** Boy çarpanı (havan patlaması büyük). */
+  size: number;
 }
 
 /**
@@ -72,13 +73,13 @@ export class WorldView {
   private trees: InstancedMesh | null = null;
   private rocks: InstancedMesh | null = null;
   private readonly enemyMeshes: InstancedMesh[];
-  private readonly bolts: InstancedMesh;
   private readonly gems: InstancedMesh;
   private readonly puffs: InstancedMesh;
   private readonly aura: Group;
   private readonly auraRing: Mesh;
   private readonly puffList: Puff[] = [];
   private deathCursor = 0;
+  private blastCursor = 0;
 
   constructor(
     enemyCapacity: number,
@@ -94,7 +95,6 @@ export class WorldView {
       return mesh;
     });
 
-    this.bolts = instanced(boltGeometry(), new MeshBasicMaterial({ color: 0xaee9ff }), 768, false);
     this.gems = instanced(
       gemGeometry(),
       new MeshLambertMaterial({ color: 0xffffff, emissive: 0x1b4a7a, flatShading: true }),
@@ -128,7 +128,7 @@ export class WorldView {
     this.aura.add(disc, this.auraRing);
     this.aura.visible = false;
 
-    this.root.add(this.bolts, this.gems, this.puffs, this.aura);
+    this.root.add(this.gems, this.puffs, this.aura);
   }
 
   /** Yeni run: araziyi ve statik dekoru yeniden kur. */
@@ -170,11 +170,11 @@ export class WorldView {
     }
     this.puffList.length = 0;
     this.deathCursor = world.deathFx.written;
+    this.blastCursor = world.blastFx.written;
   }
 
   update(world: World, time: number, dt: number): void {
     this.updateEnemies(world, time);
-    this.updateBolts(world);
     this.updateGems(world, time);
     this.updatePuffs(world, dt);
 
@@ -238,21 +238,6 @@ export class WorldView {
     });
   }
 
-  private updateBolts(world: World): void {
-    const pr = world.projectiles;
-    let k = 0;
-    for (let i = 0; i < pr.count; i++) {
-      if (pr.dead[i]) continue;
-      pos.set(pr.x[i], pr.y[i], pr.z[i]);
-      quat.identity();
-      scl.setScalar(pr.radius[i]);
-      m4.compose(pos, quat, scl);
-      this.bolts.setMatrixAt(k++, m4);
-    }
-    this.bolts.count = k;
-    this.bolts.instanceMatrix.needsUpdate = true;
-  }
-
   private updateGems(world: World, time: number): void {
     const g = world.gems;
     let k = 0;
@@ -283,6 +268,18 @@ export class WorldView {
         z: d[o + 2],
         t: 0,
         color: ENEMIES[d[o + 3]]?.color ?? 0xffffff,
+        size: 1,
+      });
+    });
+    this.blastCursor = world.blastFx.drain(this.blastCursor, (d, o) => {
+      if (this.puffList.length >= 256) this.puffList.shift();
+      this.puffList.push({
+        x: d[o],
+        y: d[o + 1] + 0.4,
+        z: d[o + 2],
+        t: 0,
+        color: 0xff8a3d,
+        size: d[o + 3] * 0.9,
       });
     });
     let k = 0;
@@ -296,7 +293,7 @@ export class WorldView {
       const s = p.t < 0.15 ? 0.5 + (p.t / 0.15) * 0.9 : 1.4 * (1 - (p.t - 0.15) / 0.25);
       pos.set(p.x, p.y + p.t * 1.5, p.z);
       quat.identity();
-      scl.setScalar(Math.max(0.01, s));
+      scl.setScalar(Math.max(0.01, s * p.size));
       m4.compose(pos, quat, scl);
       this.puffs.setMatrixAt(k, m4);
       col.setHex(p.color);

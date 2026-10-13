@@ -12,8 +12,10 @@ import {
 } from 'three';
 import type { World } from '../sim/world/World';
 import { CameraRig } from './CameraRig';
+import { DamageNumbers } from './DamageNumbers';
 import { PlayerView } from './PlayerView';
 import type { QualitySettings } from './Quality';
+import { WeaponFx } from './WeaponFx';
 import { WorldView } from './WorldView';
 
 const SKY = 0x9fd3ff;
@@ -27,6 +29,8 @@ export class Renderer3D {
   private readonly sun: DirectionalLight;
   private readonly playerView = new PlayerView();
   private readonly worldView: WorldView;
+  private readonly weaponFx = new WeaponFx();
+  readonly damageNumbers = new DamageNumbers();
   private time = 0;
 
   constructor(container: HTMLElement, quality: QualitySettings, enemyCapacity: number) {
@@ -62,7 +66,7 @@ export class Renderer3D {
     this.scene.add(this.sun, this.sun.target);
 
     this.worldView = new WorldView(enemyCapacity, quality.shadows);
-    this.scene.add(this.worldView.root, this.playerView.root);
+    this.scene.add(this.worldView.root, this.playerView.root, this.weaponFx.root, this.damageNumbers.mesh);
 
     this.resize();
     window.addEventListener('resize', () => this.resize());
@@ -74,6 +78,8 @@ export class Renderer3D {
 
   setWorld(world: World): void {
     this.worldView.setWorld(world);
+    this.weaponFx.reset(world);
+    this.damageNumbers.reset(world);
   }
 
   resize(): void {
@@ -98,6 +104,8 @@ export class Renderer3D {
 
     this.playerView.update(p, dt, this.time);
     this.worldView.update(world, this.time, dt);
+    this.weaponFx.update(world, this.time, dt);
+    this.damageNumbers.update(world, dt);
     this.renderer.render(this.scene, this.camera);
   }
 }

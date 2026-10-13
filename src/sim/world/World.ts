@@ -3,7 +3,8 @@ import { BALANCE, xpToNext } from '../../data/balance';
 import { ENEMIES } from '../../data/enemies';
 import { TOMES, tomeValue } from '../../data/tomes';
 import { WEAPON_INDEX, WEAPONS } from '../../data/weapons';
-import { ProjectilePool } from '../combat/ProjectilePool';
+import { Blasts } from '../combat/Blasts';
+import { PF_GROUND_FOLLOW, PF_RETURNING, PF_RETURNS, ProjectilePool } from '../combat/ProjectilePool';
 import { EnemyPool } from '../enemies/EnemyPool';
 import { SpawnDirector } from '../enemies/SpawnDirector';
 import { GemPool } from '../pickups/GemPool';
@@ -23,6 +24,23 @@ export interface WorldOptions {
   enemyCap?: number;
   godMode?: boolean;
   startWeapon?: string;
+}
+
+export interface ProjectileSpawn {
+  kind: number;
+  x: number;
+  y: number;
+  z: number;
+  vx: number;
+  vy: number;
+  vz: number;
+  life: number;
+  damage: number;
+  radius: number;
+  pierce: number;
+  knockback: number;
+  homing?: number;
+  flags?: number;
 }
 
 const PB = BALANCE.player;
@@ -50,6 +68,13 @@ export class World {
   /** Render/ses için olay akışları. death: x,y,z,type · hit: x,y,z,hasar,kritik */
   readonly deathFx = new EventRing(256, 4);
   readonly hitFx = new EventRing(512, 5);
+  /** Kılıç savuruşu: x,y,z,açı,menzil */
+  readonly arcFx = new EventRing(32, 5);
+  /** Şimşek: x1,y1,z1,x2,y2,z2 */
+  readonly beamFx = new EventRing(128, 6);
+  /** Patlama: x,y,z,yarıçap */
+  readonly blastFx = new EventRing(64, 4);
+  readonly blasts = new Blasts(48);
 
   enemyCap: number;
   godMode: boolean;
@@ -127,6 +152,7 @@ export class World {
 
     for (const w of this.weapons) updateWeapon(this, w, dt);
     this.updateProjectiles(dt);
+    this.updateBlasts(dt);
     this.updateEnemies(dt);
     this.updateGems(dt);
     this.director.update(this, dt);
@@ -426,37 +452,83 @@ export class World {
 
   // ---------------------------------------------------------------- Mermiler
 
-  spawnProjectile(
-    kind: number,
-    x: number,
-    y: number,
-    z: number,
-    vx: number,
-    vy: number,
-    vz: number,
-    life: number,
-    damage: number,
-    radius: number,
-    pierce: number,
-    knockback: number,
-    homing: number,
-  ): void {
+  spawnProjectile(o: ProjectileSpawn): void {
     const pr = this.projectiles;
     const i = pr.add();
     if (i < 0) return;
-    pr.kind[i] = kind;
-    pr.x[i] = x;
-    pr.y[i] = y;
-    pr.z[i] = z;
-    pr.vx[i] = vx;
-    pr.vy[i] = vy;
-    pr.vz[i] = vz;
-    pr.life[i] = life;
-    pr.damage[i] = damage;
-    pr.radius[i] = radius;
-    pr.pierceLeft[i] = Math.max(1, pierce);
-    pr.knockback[i] = knockback;
-    pr.homing[i] = homing;
+    pr.kind[i] = o.kind;
+    pr.x[i] = o.x;
+    pr.y[i] = o.y;
+    pr.z[i] = o.z;
+    pr.vx[i] = o.vx;
+    pr.vy[i] = o.vy;
+    pr.vz[i] = o.vz;
+    pr.life[i] = pr.maxLife[i] = o.life;
+    pr.damage[i] = o.damage;
+    pr.radius[i] = o.radius;
+    pr.pierceLeft[i] = Math.min(255, Math.max(1, o.pierce));
+    pr.knockback[i] = o.knockback;
+    pr.homing[i] = o.homing ?? 0;
+    pr.flags[i] = o.flags ?? 0;
+  }
+
+  /** Gecikmeli patlama (Havan). */
+  addBlast(x: number, z: number, radius: number, damage: number, knockback: number, delay: number): void {
+    this.blasts.add(x, z, radius, damage, knockback, delay);
+  }
+
+  private updateBlasts(dt: number): void {
+    const b = this.blasts;
+    for (let i = b.count - 1; i >= 0; i--) {
+      b.timer[i] -= dt;
+      if (b.timer[i] > 0) continue;
+      const y = this.terrain.heightAt(b.x[i], b.z[i]);
+      this.damageInRadius(b.x[i], y + 0.5, b.z[i], b.radius[i], b.damage[i], b.knockback[i]);
+      this.blastFx.push(b.x[i], y, b.z[i], b.radius[i]);
+      b.removeAt(i);
+    }
+  }
+
+  /** (x,z) çevresindeki r yarıçapta canlı düşman sayısı. */
+  countEnemiesNear(x: number, z: number, r: number): number {
+    const e = this.enemies;
+    const n = this.enemyGrid.query(x, z, r, this.buf);
+    let c = 0;
+    for (let k = 0; k < n; k++) {
+      const j = this.buf[k];
+      if (j >= e.count || e.dead[j]) continue;
+      if ((e.x[j] - x) ** 2 + (e.z[j] - z) ** 2 <= r * r) c++;
+    }
+    return c;
+  }
+
+  /**
+   * Yön (dirX, dirZ) etrafında yarım açısının kosinüsü cosHalf olan dilimdeki düşmanlara hasar
+   * (Kılıç Savuruşu). Çok yakındakiler açıdan bağımsız vurulur.
+   */
+  damageInSector(
+    x: number,
+    y: number,
+    z: number,
+    dirX: number,
+    dirZ: number,
+    r: number,
+    cosHalf: number,
+    base: number,
+    knock: number,
+  ): void {
+    const e = this.enemies;
+    const n = this.enemyGrid.query(x, z, r + 1, this.buf);
+    for (let k = 0; k < n; k++) {
+      const j = this.buf[k];
+      if (j >= e.count || e.dead[j]) continue;
+      const dx = e.x[j] - x;
+      const dz = e.z[j] - z;
+      const d = Math.hypot(dx, dz) || 1e-4;
+      if (d > r + e.radius[j] || Math.abs(e.y[j] + e.hover[j] - y) > 2.5) continue;
+      if (d > 1.2 && (dx * dirX + dz * dirZ) / d < cosHalf) continue;
+      this.damageEnemy(j, base, (dx / d) * knock, (dz / d) * knock);
+    }
   }
 
   private readonly homingTarget = new Int32Array(1);
@@ -497,12 +569,41 @@ export class World {
         }
       }
 
+      // Bumerang: ömrünün yarısında oyuncuya döner; dönüşte aynı düşmanlara tekrar vurabilir.
+      const fl = pr.flags[i];
+      if (fl & PF_RETURNS) {
+        if (!(fl & PF_RETURNING) && pr.life[i] < pr.maxLife[i] * 0.5) {
+          pr.flags[i] |= PF_RETURNING;
+          pr.hitCount[i] = 0;
+        }
+        if (pr.flags[i] & PF_RETURNING) {
+          const p = this.player;
+          const dx = p.x - pr.x[i];
+          const dz = p.z - pr.z[i];
+          const d = Math.hypot(dx, dz);
+          if (d < 1) {
+            pr.dead[i] = 1;
+            continue;
+          }
+          const speed = Math.hypot(pr.vx[i], pr.vz[i]);
+          pr.vx[i] = (dx / d) * speed;
+          pr.vz[i] = (dz / d) * speed;
+        }
+      }
+
       pr.x[i] += pr.vx[i] * dt;
-      pr.y[i] += pr.vy[i] * dt;
       pr.z[i] += pr.vz[i] * dt;
-      if (pr.y[i] < this.terrain.heightAt(pr.x[i], pr.z[i]) - 0.3) {
-        pr.dead[i] = 1;
-        continue;
+      const ground = this.terrain.heightAt(pr.x[i], pr.z[i]);
+      if (fl & PF_GROUND_FOLLOW) {
+        // Göğüs hizasında araziyi takip et (tepelere çarpıp kaybolmasın).
+        pr.y[i] += pr.vy[i] * dt;
+        pr.y[i] += (ground + 1.1 - pr.y[i]) * Math.min(1, 10 * dt);
+      } else {
+        pr.y[i] += pr.vy[i] * dt;
+        if (pr.y[i] < ground - 0.3) {
+          pr.dead[i] = 1;
+          continue;
+        }
       }
 
       // Çarpışma

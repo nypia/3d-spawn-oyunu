@@ -138,3 +138,24 @@ export function boltGeometry(): BufferGeometry {
 export function puffGeometry(): BufferGeometry {
   return new IcosahedronGeometry(0.5, 0);
 }
+
+export function axeGeometry(): BufferGeometry {
+  const handle = new CylinderGeometry(0.05, 0.05, 1.1, 5).rotateZ(Math.PI / 2);
+  const blade = new ConeGeometry(0.32, 0.5, 4)
+    .rotateZ(-Math.PI / 2)
+    .scale(1, 1, 0.25)
+    .translate(0.55, 0, 0);
+  return build([
+    [handle, 0x7a5232],
+    [blade, 0xd8dde6],
+  ]);
+}
+
+export function pelletGeometry(): BufferGeometry {
+  return new IcosahedronGeometry(1, 0);
+}
+
+export function orbGeometry(): BufferGeometry {
+  const rock = new DodecahedronGeometry(0.42, 0);
+  return build([[rock, 0xb7a6ff]]);
+}

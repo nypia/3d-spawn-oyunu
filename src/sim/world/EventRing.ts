@@ -15,7 +15,7 @@ export class EventRing {
     this.data = new Float32Array(capacity * stride);
   }
 
-  push(a: number, b = 0, c = 0, d = 0, e = 0): void {
+  push(a: number, b = 0, c = 0, d = 0, e = 0, f = 0): void {
     const o = (this.written % this.capacity) * this.stride;
     const s = this.stride;
     this.data[o] = a;
@@ -23,6 +23,7 @@ export class EventRing {
     if (s > 2) this.data[o + 2] = c;
     if (s > 3) this.data[o + 3] = d;
     if (s > 4) this.data[o + 4] = e;
+    if (s > 5) this.data[o + 5] = f;
     this.written++;
   }
 
