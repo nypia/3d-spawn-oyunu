@@ -7,6 +7,7 @@ import { describeUpgrade } from '../sim/progression/Upgrades';
 import { World } from '../sim/world/World';
 import { Hud } from '../ui/Hud';
 import { Screens } from '../ui/Screens';
+import { TouchControls } from '../ui/TouchControls';
 import { type Flags, readFlags } from './flags';
 import { Input } from './Input';
 import { randomSeed } from './Rng';
@@ -27,6 +28,7 @@ export class Game {
   private readonly input: Input;
   private readonly hud: Hud;
   private readonly screens: Screens;
+  private readonly touch: TouchControls;
   private readonly debug: DebugOverlay | null;
   private readonly quality: QualitySettings;
   private readonly flags: Flags;
@@ -42,12 +44,18 @@ export class Game {
     this.renderer = new Renderer3D(root, this.quality, Math.max(1200, bench));
     this.input = new Input(this.renderer.canvas);
     this.hud = new Hud(root);
+    // Katman sırası: canvas < HUD < dokunmatik kontroller < menüler (kartlara dokunulabilsin).
+    this.touch = new TouchControls(root, isTouchDevice());
+    this.touch.onPause = () => {
+      if (this.state === 'playing') this.pause();
+    };
+    this.input.attachTouch(this.touch);
     this.screens = new Screens(root);
     this.debug = this.flags.debug || bench > 0 ? new DebugOverlay(root) : null;
 
     this.world = this.createWorld();
     this.bindKeys();
-    this.screens.showStart(() => this.startRun(), isTouchDevice());
+    this.screens.showStart(() => this.startRun());
 
     // Test ve hata ayıklama için konsoldan erişim.
     (window as unknown as { game: Game }).game = this;
@@ -92,6 +100,7 @@ export class Game {
   private setState(s: State): void {
     this.state = s;
     this.hud.setVisible(s !== 'menu');
+    this.touch.setVisible(s === 'playing');
     if (s === 'playing') this.screens.hide();
   }
 
@@ -170,6 +179,23 @@ export class Game {
     );
   }
 
+  /**
+   * Dokunmatikte kamera, joystick ileri itilirken oyuncunun arkasına yumuşakça döner
+   * (sağ elle sürekli kamera çevirmek zorunda kalınmasın).
+   */
+  private autoCamera(dt: number): void {
+    const t = this.touch;
+    if (!t.active || t.cameraDragging) return;
+    const fwd = t.axes[0];
+    const p = this.world.player;
+    if (fwd < 0.2 || p.speed < 1) return;
+    const rig = this.renderer.rig;
+    let diff = p.facing + Math.PI - rig.yaw;
+    diff = Math.atan2(Math.sin(diff), Math.cos(diff));
+    const maxStep = 1.2 * fwd * dt;
+    rig.yaw += Math.max(-maxStep, Math.min(maxStep, diff));
+  }
+
   private frame(dt: number): void {
     const w = this.world;
     if (this.state === 'playing') {
@@ -177,6 +203,7 @@ export class Game {
       const rig = this.renderer.rig;
       rig.addLook(dx, dy);
       rig.yaw += this.input.rotateAxis() * dt * 2.2;
+      this.autoCamera(dt);
 
       // Kamera yönüne göre dünya uzayı hareket vektörü.
       const [fwd, right] = this.input.axes();

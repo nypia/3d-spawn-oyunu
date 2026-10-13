@@ -22,21 +22,28 @@ export class Screens {
     this.el.style.display = '';
   }
 
-  showStart(onPlay: () => void, touch: boolean): void {
+  showStart(onPlay: () => void): void {
     const play = h('button.btn.btn-primary', { 'data-testid': 'play' }, 'OYNA');
     play.addEventListener('click', onPlay);
-    const controls = h(
-      'ul.controls',
-      {},
-      ...[
-        ['WASD', 'Hareket'],
-        ['Fare', 'Kamera (tıkla → kilitle)'],
-        ['Space', 'Zıpla (havada tekrar: çift zıplama kitabıyla)'],
-        ['Shift', 'Kay — yokuş aşağı hızlanırsın, kayarken zıpla!'],
-        ['Q / E', 'Kamerayı döndür'],
-        ['Esc', 'Duraklat'],
-      ].map(([k, v]) => h('li', {}, h('kbd', {}, k), ` ${v}`)),
-    );
+    const keys = [
+      ['WASD', 'Hareket'],
+      ['Fare', 'Kamera (tıkla → kilitle)'],
+      ['Space', 'Zıpla'],
+      ['Shift', 'Kay: yokuş aşağı hızlanırsın, kayarken zıpla'],
+      ['Q / E', 'Kamerayı döndür'],
+      ['Esc', 'Duraklat'],
+    ];
+    const touchKeys = [
+      ['Sol yarı', 'Sürükle → koş'],
+      ['Sağ yarı', 'Sürükle → kamera'],
+      ['ZIPLA', 'Zıpla'],
+      ['KAY', 'Basılı tut → kay, yokuş aşağı hızlan'],
+      ['II', 'Duraklat'],
+    ];
+    const list = (rows: string[][], cls: string) =>
+      h(`ul.controls.${cls}`, {}, ...rows.map(([k, v]) => h('li', {}, h('kbd', {}, k), ` ${v}`)));
+    // Hangisinin görüneceğine CSS karar verir (body.touch); ilk dokunuşta değişir.
+    const controls = h('div', {}, list(keys, 'controls-keys'), list(touchKeys, 'controls-touch'));
     const panel = h(
       'div.panel.start',
       {},
@@ -46,11 +53,6 @@ export class Screens {
       controls,
       play,
     );
-    if (touch) {
-      panel.append(
-        h('p.note', {}, 'Dokunmatik kontroller yakında (M5). Şimdilik klavye + fare ile oynanır.'),
-      );
-    }
     this.show(panel);
   }
 
@@ -73,7 +75,7 @@ export class Screens {
         'div.panel.levelup',
         {},
         h('h2', {}, `Seviye ${level}!`),
-        h('p.subtitle', {}, 'Bir yükseltme seç (1 / 2 / 3)'),
+        h('p.subtitle', {}, 'Bir yükseltme seç', h('span.keys-only', {}, ' (1 / 2 / 3)')),
         h('div.cards', {}, ...cards),
       ),
     );

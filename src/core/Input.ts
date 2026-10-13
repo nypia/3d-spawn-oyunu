@@ -1,3 +1,8 @@
+import type { TouchControls } from '../ui/TouchControls';
+
+/** Dokunmatik sürüklemede kamera hassasiyeti çarpanı (fare pikseline göre). */
+const TOUCH_LOOK_SCALE = 1.6;
+
 const GAME_KEYS = new Set([
   'KeyW',
   'KeyA',
@@ -17,9 +22,9 @@ const GAME_KEYS = new Set([
 ]);
 
 /**
- * Klavye + fare girdisi. Pointer lock varsa fare hareketi kamerayı döndürür;
- * yoksa (ya da reddedilirse) sürükleyerek bakma çalışır.
- * Dokunmatik kontroller M5'te bu sınıfa eklenecek (aynı eksen arayüzü).
+ * Klavye + fare + dokunmatik girdi. Pointer lock varsa fare hareketi kamerayı döndürür;
+ * yoksa (ya da reddedilirse) sürükleyerek bakma çalışır. Dokunmatik kontroller
+ * (TouchControls) bağlanırsa aynı eksen arayüzüne eklenir.
  */
 export class Input {
   locked = false;
@@ -31,6 +36,7 @@ export class Input {
   private lookY = 0;
   private jumpQueued = false;
   private dragging = false;
+  private touch: TouchControls | null = null;
 
   constructor(private readonly el: HTMLElement) {
     window.addEventListener('keydown', (e) => {
@@ -67,7 +73,17 @@ export class Input {
     this.actions.set(code, fn);
   }
 
+  attachTouch(touch: TouchControls): void {
+    this.touch = touch;
+  }
+
+  /** Dokunmatik mod açıksa (ilk dokunuştan sonra) pointer lock istenmez. */
+  get touchActive(): boolean {
+    return this.touch?.active === true;
+  }
+
   requestLock(): void {
+    if (this.touchActive) return;
     try {
       const r = this.el.requestPointerLock() as unknown;
       if (r instanceof Promise) r.catch(() => {});
@@ -82,6 +98,11 @@ export class Input {
 
   consumeLook(): [number, number] {
     const r: [number, number] = [this.lookX, this.lookY];
+    if (this.touch) {
+      const [tx, ty] = this.touch.consumeLook();
+      r[0] += tx * TOUCH_LOOK_SCALE;
+      r[1] += ty * TOUCH_LOOK_SCALE;
+    }
     this.lookX = 0;
     this.lookY = 0;
     return r;
@@ -90,7 +111,8 @@ export class Input {
   consumeJump(): boolean {
     const j = this.jumpQueued;
     this.jumpQueued = false;
-    return j;
+    const t = this.touch?.consumeJump() ?? false;
+    return j || t;
   }
 
   /** [ileri, sağ] eksenleri, -1..1 */
@@ -99,12 +121,20 @@ export class Input {
     const fwd = (k.has('KeyW') || k.has('ArrowUp') ? 1 : 0) - (k.has('KeyS') || k.has('ArrowDown') ? 1 : 0);
     const right =
       (k.has('KeyD') || k.has('ArrowRight') ? 1 : 0) - (k.has('KeyA') || k.has('ArrowLeft') ? 1 : 0);
-    return [fwd, right];
+    if (!this.touch) return [fwd, right];
+    const [tf, tr] = this.touch.axes;
+    return [clamp1(fwd + tf), clamp1(right + tr)];
   }
 
   slideHeld(): boolean {
     const k = this.keys;
-    return k.has('ShiftLeft') || k.has('ShiftRight') || k.has('ControlLeft') || k.has('KeyC');
+    return (
+      k.has('ShiftLeft') ||
+      k.has('ShiftRight') ||
+      k.has('ControlLeft') ||
+      k.has('KeyC') ||
+      this.touch?.slideHeld === true
+    );
   }
 
   /** Q/E ile kamera döndürme (fare kullanmayanlar için). */
@@ -117,5 +147,10 @@ export class Input {
     this.jumpQueued = false;
     this.lookX = 0;
     this.lookY = 0;
+    this.touch?.reset();
   }
+}
+
+function clamp1(v: number): number {
+  return v < -1 ? -1 : v > 1 ? 1 : v;
 }
