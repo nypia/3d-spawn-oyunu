@@ -106,6 +106,9 @@ export class Game {
 
   private bindKeys(): void {
     const inp = this.input;
+    inp.onKey('KeyR', () => {
+      if (this.state === 'levelup') this.reroll();
+    });
     inp.onKey('Escape', () => {
       if (this.state === 'playing') this.pause();
       else if (this.state === 'paused') this.resume();
@@ -171,12 +174,29 @@ export class Game {
   private showLevelUp(): void {
     this.setState('levelup');
     this.input.exitLock();
-    const offer = this.world.offer ?? [];
+    const w = this.world;
+    const offer = w.offer ?? [];
     this.screens.showLevelUp(
-      this.world.level - this.world.pendingLevelUps + 1,
+      w.level - w.pendingLevelUps + 1,
       offer.map(describeUpgrade),
-      (i) => this.pick(i),
+      {
+        pick: (i) => this.pick(i),
+        banish: (i) => {
+          if (w.banish(i)) this.showLevelUp();
+        },
+        reroll: () => this.reroll(),
+        skip: () => {
+          if (!w.skip()) return;
+          if (w.offer) this.showLevelUp();
+          else this.resume();
+        },
+      },
+      { rerolls: w.rerolls, banishes: w.banishes, skips: w.skips },
     );
+  }
+
+  private reroll(): void {
+    if (this.world.reroll()) this.showLevelUp();
   }
 
   /**

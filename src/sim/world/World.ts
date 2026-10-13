@@ -1,14 +1,15 @@
 import { Rng } from '../../core/Rng';
 import { BALANCE, xpToNext } from '../../data/balance';
 import { ENEMIES } from '../../data/enemies';
-import { TOMES } from '../../data/tomes';
+import { TOMES, tomeValue } from '../../data/tomes';
 import { WEAPON_INDEX, WEAPONS } from '../../data/weapons';
 import { ProjectilePool } from '../combat/ProjectilePool';
 import { EnemyPool } from '../enemies/EnemyPool';
 import { SpawnDirector } from '../enemies/SpawnDirector';
 import { GemPool } from '../pickups/GemPool';
 import { Player, type PlayerInput } from '../player/Player';
-import { rollUpgrades, type UpgradeOption } from '../progression/Upgrades';
+import { rarityMult } from '../progression/Rarity';
+import { rollUpgrades, type UpgradeOption, upgradeKey } from '../progression/Upgrades';
 import { SpatialGrid } from '../spatial/SpatialGrid';
 import { Stats } from '../stats/Stats';
 import { Heightmap } from '../terrain/Heightmap';
@@ -66,6 +67,14 @@ export class World {
   /** Render için: Ateş Halesi yarıçapı (0 = yok). */
   auraRadius = 0;
   damageDealt = 0;
+  gold = 0;
+
+  /** Run başına seviye atlama hakları. */
+  rerolls = 2;
+  banishes = 1;
+  skips = 1;
+  /** Yasaklanan silah/kitap anahtarları (upgradeKey). */
+  readonly banished = new Set<string>();
 
   private readonly buf = new Int32Array(4096);
   private readonly topDist = new Float32Array(16);
@@ -145,6 +154,40 @@ export class World {
     const opt = this.offer[index];
     if (!opt) return;
     this.applyUpgrade(opt);
+    this.resolveLevelUp();
+  }
+
+  /** Kartları yeniden çeker (hak harcar). */
+  reroll(): boolean {
+    if (!this.offer || this.rerolls <= 0) return false;
+    this.rerolls--;
+    this.offer = rollUpgrades(this, this.rng);
+    return true;
+  }
+
+  /** Kartı yasaklar: o silah/kitap bu run boyunca bir daha çıkmaz; yerine yeni kart gelir. */
+  banish(index: number): boolean {
+    const opt = this.offer?.[index];
+    if (!this.offer || !opt || opt.kind === 'heal' || this.banishes <= 0) return false;
+    this.banishes--;
+    this.banished.add(upgradeKey(opt));
+    const others = new Set(this.offer.filter((_, i) => i !== index).map(upgradeKey));
+    const [replacement] = rollUpgrades(this, this.rng, 1, others);
+    if (replacement) this.offer[index] = replacement;
+    else this.offer.splice(index, 1);
+    return true;
+  }
+
+  /** Seviye atlamayı geçer; karşılığında az miktar altın. */
+  skip(): boolean {
+    if (!this.offer || this.skips <= 0) return false;
+    this.skips--;
+    this.gold += 5;
+    this.resolveLevelUp();
+    return true;
+  }
+
+  private resolveLevelUp(): void {
     this.offer = null;
     this.pendingLevelUps--;
     if (this.pendingLevelUps > 0) this.offer = rollUpgrades(this, this.rng);
@@ -158,17 +201,18 @@ export class World {
         break;
       case 'weaponLevel': {
         const w = this.weapons.find((x) => x.def === WEAPONS[opt.weapon]);
-        if (w) levelUpWeapon(w);
+        if (w) levelUpWeapon(w, rarityMult(opt.rarity));
         break;
       }
       case 'tome': {
         const d = TOMES[opt.tome];
+        const v = tomeValue(d, rarityMult(opt.rarity));
         this.tomeLevels[opt.tome]++;
-        if (d.mode === 'mult') this.stats.addMult(d.stat, d.perLevel);
-        else this.stats.addFlat(d.stat, d.perLevel);
+        if (d.mode === 'mult') this.stats.addMult(d.stat, v);
+        else this.stats.addFlat(d.stat, v);
         if (d.stat === 'maxHp') {
           p.maxHp = this.stats.get('maxHp');
-          p.hp = Math.min(p.maxHp, p.hp + d.perLevel);
+          p.hp = Math.min(p.maxHp, p.hp + v);
         }
         break;
       }

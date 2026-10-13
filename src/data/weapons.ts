@@ -1,6 +1,7 @@
 /**
- * Silah = veri + davranış. Davranış kodu sim/weapons/behaviors altında; burada sadece sayılar.
- * Seviye 1 = baseStats; her sonraki seviye `levels[i]` deltasını uygular.
+ * Silah = veri + davranış. Davranış kodu sim/weapons/Weapons.ts içinde; burada sadece sayılar.
+ * Seviye 1 = base; her yükseltme `levels[i]` deltasını kartın nadirlik çarpanıyla uygular.
+ * Kart açıklaması deltadan otomatik üretilir (describeDelta).
  */
 export type WeaponBehavior = 'homingBolt' | 'aura';
 
@@ -21,14 +22,21 @@ export interface WeaponStats {
   knockback: number;
 }
 
+/**
+ * Bir seviye yükseltmesinin getirdikleri. Kesirli alanlar nadirlik çarpanıyla büyür;
+ * tam sayı alanlar (count, pierce) büyümez.
+ */
 export interface WeaponLevelDelta {
-  desc: string;
+  /** Mutlak hasar artışı. */
   damage?: number;
-  cooldownMul?: number;
+  /** Bekleme süresi azalması (0.15 = −%15). */
+  cooldownPct?: number;
+  /** Alan artışı, taban alana oranla (0.2 = +%20). */
+  areaPct?: number;
+  /** Süre artışı, tabana oranla. */
+  durationPct?: number;
   count?: number;
-  area?: number;
   pierce?: number;
-  speed?: number;
 }
 
 export interface WeaponDef {
@@ -59,13 +67,13 @@ export const WEAPONS: readonly WeaponDef[] = [
       knockback: 2.5,
     },
     levels: [
-      { desc: '+1 mermi', count: 1 },
-      { desc: '+6 hasar', damage: 6 },
-      { desc: 'Bekleme süresi −%15', cooldownMul: 0.85 },
-      { desc: '+1 mermi', count: 1 },
-      { desc: '+1 delme, +5 hasar', pierce: 1, damage: 5 },
-      { desc: '+1 mermi', count: 1 },
-      { desc: '+10 hasar, bekleme −%10', damage: 10, cooldownMul: 0.9 },
+      { count: 1 },
+      { damage: 6 },
+      { cooldownPct: 0.15 },
+      { count: 1 },
+      { pierce: 1, damage: 5 },
+      { count: 1 },
+      { damage: 10, cooldownPct: 0.1 },
     ],
   },
   {
@@ -85,13 +93,13 @@ export const WEAPONS: readonly WeaponDef[] = [
       knockback: 0.6,
     },
     levels: [
-      { desc: 'Alan +%20', area: 0.56 },
-      { desc: '+4 hasar', damage: 4 },
-      { desc: 'Tick aralığı −%15', cooldownMul: 0.85 },
-      { desc: 'Alan +%20, +3 hasar', area: 0.6, damage: 3 },
-      { desc: '+6 hasar', damage: 6 },
-      { desc: 'Alan +%25', area: 0.8 },
-      { desc: '+8 hasar, tick −%10', damage: 8, cooldownMul: 0.9 },
+      { areaPct: 0.2 },
+      { damage: 4 },
+      { cooldownPct: 0.15 },
+      { areaPct: 0.2, damage: 3 },
+      { damage: 6 },
+      { areaPct: 0.25 },
+      { damage: 8, cooldownPct: 0.1 },
     ],
   },
 ];
@@ -100,4 +108,17 @@ export const WEAPON_INDEX: Record<string, number> = Object.fromEntries(WEAPONS.m
 
 export function weaponMaxLevel(def: WeaponDef): number {
   return def.levels.length + 1;
+}
+
+/** Deltayı nadirlik çarpanıyla okunur metne çevirir: "+9 hasar, bekleme −%22". */
+export function describeDelta(d: WeaponLevelDelta, mult: number): string {
+  const parts: string[] = [];
+  if (d.damage) parts.push(`+${Math.round(d.damage * mult)} hasar`);
+  if (d.count) parts.push(`+${d.count} mermi`);
+  if (d.pierce) parts.push(`+${d.pierce} delme`);
+  if (d.cooldownPct) parts.push(`bekleme −%${Math.round(Math.min(0.6, d.cooldownPct * mult) * 100)}`);
+  if (d.areaPct) parts.push(`alan +%${Math.round(d.areaPct * mult * 100)}`);
+  if (d.durationPct) parts.push(`süre +%${Math.round(d.durationPct * mult * 100)}`);
+  const s = parts.join(', ');
+  return s.charAt(0).toLocaleUpperCase('tr-TR') + s.slice(1);
 }

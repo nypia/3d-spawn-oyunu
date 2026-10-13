@@ -2,6 +2,19 @@ import type { UpgradeView } from '../sim/progression/Upgrades';
 import type { World } from '../sim/world/World';
 import { formatTime, h } from './dom';
 
+export interface LevelUpActions {
+  pick: (i: number) => void;
+  banish: (i: number) => void;
+  reroll: () => void;
+  skip: () => void;
+}
+
+export interface LevelUpCharges {
+  rerolls: number;
+  banishes: number;
+  skips: number;
+}
+
 /** Tam ekran katmanlar: başlangıç, seviye atlama, duraklatma, oyun sonu. */
 export class Screens {
   private readonly el: HTMLDivElement;
@@ -56,27 +69,57 @@ export class Screens {
     this.show(panel);
   }
 
-  showLevelUp(level: number, options: UpgradeView[], onPick: (i: number) => void): void {
+  showLevelUp(level: number, options: UpgradeView[], actions: LevelUpActions, charges: LevelUpCharges): void {
     const cards = options.map((o, i) => {
       const card = h(
         'button.card',
-        { 'data-testid': `card-${i}` },
+        { 'data-testid': `card-${i}`, 'data-rarity': o.rarity === null ? 'none' : String(o.rarity) },
         h('span.card-key', {}, String(i + 1)),
         h('span.card-icon', {}, o.icon),
         h('span.card-title', {}, o.title),
         h('span.card-badge', {}, o.badge),
         h('span.card-desc', {}, o.description),
       );
-      card.addEventListener('click', () => onPick(i));
+      if (o.rarityName) card.append(h('span.card-rarity', {}, o.rarityName));
+      card.addEventListener('click', () => actions.pick(i));
+      if (charges.banishes > 0 && o.badge !== 'İYİLEŞME') {
+        const ban = h(
+          'span.card-ban',
+          { role: 'button', 'aria-label': `${o.title} kartını yasakla`, 'data-testid': `ban-${i}` },
+          '✕',
+        );
+        ban.addEventListener('click', (e) => {
+          e.stopPropagation();
+          actions.banish(i);
+        });
+        card.append(ban);
+      }
       return card;
     });
+    const reroll = h(
+      'button.btn.btn-small',
+      { 'data-testid': 'reroll' },
+      `🎲 Yenile (${charges.rerolls})`,
+      h('span.keys-only', {}, ' R'),
+    );
+    reroll.disabled = charges.rerolls <= 0;
+    reroll.addEventListener('click', actions.reroll);
+    const skip = h('button.btn.btn-small', { 'data-testid': 'skip' }, `⏭ Atla +5 altın (${charges.skips})`);
+    skip.disabled = charges.skips <= 0;
+    skip.addEventListener('click', actions.skip);
+    const banInfo =
+      charges.banishes > 0
+        ? h('p.note', {}, `Kartın köşesindeki ✕ ile yasakla: bir daha çıkmaz (${charges.banishes} hak)`)
+        : '';
     this.show(
       h(
         'div.panel.levelup',
         {},
         h('h2', {}, `Seviye ${level}!`),
-        h('p.subtitle', {}, 'Bir yükseltme seç', h('span.keys-only', {}, ' (1 / 2 / 3)')),
+        h('p.subtitle', {}, 'Bir yükseltme seç', h('span.keys-only', {}, ` (1–${options.length})`)),
         h('div.cards', {}, ...cards),
+        h('div.buttons', {}, reroll, skip),
+        banInfo,
       ),
     );
   }

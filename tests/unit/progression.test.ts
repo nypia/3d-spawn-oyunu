@@ -27,7 +27,7 @@ describe('Stats', () => {
 describe('Silah seviyeleri', () => {
   it('Büyü Oku seviye 2 bir mermi ekler', () => {
     const bolt = WEAPONS.find((w) => w.id === 'magicBolt')!;
-    expect(computeWeaponStats(bolt, 2).count).toBe(bolt.base.count + 1);
+    expect(computeWeaponStats(bolt, [{ delta: bolt.levels[0], mult: 1 }]).count).toBe(bolt.base.count + 1);
   });
 });
 

@@ -1,35 +1,53 @@
-import type { WeaponDef, WeaponStats } from '../../data/weapons';
+import type { WeaponDef, WeaponLevelDelta, WeaponStats } from '../../data/weapons';
 import type { World } from '../world/World';
+
+export interface AppliedDelta {
+  delta: WeaponLevelDelta;
+  /** Kartın nadirlik çarpanı. */
+  mult: number;
+}
 
 export interface WeaponInstance {
   def: WeaponDef;
   level: number;
-  /** Seviyeye göre hesaplanmış ham değerler (oyuncu stat'ları uygulanmadan). */
+  /** Alınan yükseltmeler (sırasıyla, nadirlik çarpanlarıyla). */
+  applied: AppliedDelta[];
+  /** Yükseltmelerle hesaplanmış ham değerler (oyuncu stat'ları uygulanmadan). */
   stats: WeaponStats;
   timer: number;
 }
 
 export function createWeapon(def: WeaponDef): WeaponInstance {
-  return { def, level: 1, stats: computeWeaponStats(def, 1), timer: 0.3 };
+  return { def, level: 1, applied: [], stats: computeWeaponStats(def, []), timer: 0.3 };
 }
 
-export function computeWeaponStats(def: WeaponDef, level: number): WeaponStats {
+export function computeWeaponStats(def: WeaponDef, applied: readonly AppliedDelta[]): WeaponStats {
   const s: WeaponStats = { ...def.base };
-  for (let l = 0; l < level - 1 && l < def.levels.length; l++) {
-    const d = def.levels[l];
-    if (d.damage) s.damage += d.damage;
-    if (d.cooldownMul) s.cooldown *= d.cooldownMul;
+  let cooldownCut = 0;
+  let areaPct = 0;
+  let durationPct = 0;
+  for (const { delta: d, mult } of applied) {
+    if (d.damage) s.damage += d.damage * mult;
+    if (d.cooldownPct) cooldownCut += d.cooldownPct * mult;
+    if (d.areaPct) areaPct += d.areaPct * mult;
+    if (d.durationPct) durationPct += d.durationPct * mult;
     if (d.count) s.count += d.count;
-    if (d.area) s.area += d.area;
     if (d.pierce) s.pierce += d.pierce;
-    if (d.speed) s.speed += d.speed;
   }
+  // Bekleme en fazla %75 kısalır (sonsuz ateş hızını engelle).
+  s.cooldown *= Math.max(0.25, 1 - cooldownCut);
+  s.area *= 1 + areaPct;
+  s.duration *= 1 + durationPct;
   return s;
 }
 
-export function levelUpWeapon(w: WeaponInstance): void {
+/** Silahı bir seviye yükseltir; delta, silahın sıradaki seviye deltasıdır. */
+export function levelUpWeapon(w: WeaponInstance, mult: number): void {
+  const delta = w.def.levels[w.level - 1];
+  if (!delta) return;
   w.level++;
-  w.stats = computeWeaponStats(w.def, w.level);
+  w.applied.push({ delta, mult });
+  w.stats = computeWeaponStats(w.def, w.applied);
 }
 
 const nearest = new Int32Array(16);

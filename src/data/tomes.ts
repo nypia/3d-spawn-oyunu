@@ -12,6 +12,8 @@ export interface TomeDef {
   maxLevel: number;
   /** Seviye atlama havuzundaki ağırlık. */
   weight: number;
+  /** Tam sayı stat (mermi sayısı gibi): nadirlik çarpanı aşağı yuvarlanır, en az 1. */
+  integer?: boolean;
   describe: (perLevel: number) => string;
 }
 
@@ -60,7 +62,7 @@ export const TOMES: readonly TomeDef[] = [
     perLevel: 20,
     maxLevel: 5,
     weight: 8,
-    describe: (v) => `Maks can +${v} (ve iyileştirir)`,
+    describe: (v) => `Maks can +${Math.round(v)} (ve iyileştirir)`,
   },
   {
     id: 'magnet',
@@ -93,8 +95,25 @@ export const TOMES: readonly TomeDef[] = [
     perLevel: 1,
     maxLevel: 3,
     weight: 3,
+    integer: true,
     describe: (v) => `Tüm silahlar +${v} mermi`,
   },
+  {
+    id: 'luck',
+    name: 'Şans Kitabı',
+    icon: '🍀',
+    stat: 'luck',
+    mode: 'flat',
+    perLevel: 0.15,
+    maxLevel: 5,
+    weight: 6,
+    describe: (v) => `Şans +${Math.round(v * 100)}: nadir kartlar ve eşyalar daha sık`,
+  },
 ];
+
+/** Kitabın bu nadirlikteki bir seviyesinin getirdiği değer. */
+export function tomeValue(def: TomeDef, mult: number): number {
+  return def.integer ? Math.max(1, Math.floor(def.perLevel * mult)) : def.perLevel * mult;
+}
 
 export const TOME_INDEX: Record<string, number> = Object.fromEntries(TOMES.map((t, i) => [t.id, i]));
