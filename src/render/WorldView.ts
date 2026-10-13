@@ -14,12 +14,16 @@ import {
   RingGeometry,
   Vector3,
 } from 'three';
-import { ENEMIES } from '../data/enemies';
+import { ENEMIES, EXPLODER } from '../data/enemies';
 import { OBSTACLE_ROCK, OBSTACLE_TREE } from '../sim/world/Obstacles';
 import type { World } from '../sim/world/World';
 import {
+  archerGeometry,
+  arrowGeometry,
   batGeometry,
+  bombGeometry,
   gemGeometry,
+  golemGeometry,
   puffGeometry,
   rockGeometry,
   skeletonGeometry,
@@ -38,6 +42,11 @@ const scl = new Vector3();
 const col = new Color();
 const WHITE = new Color(1, 1, 1);
 const FLASH = new Color(3, 3, 3);
+/** Elitler altın tonda parlar. */
+const ELITE_TINT = new Color(1.7, 1.35, 0.55);
+const FUSE_FLASH = new Color(3, 2.2, 1.2);
+const ARROW_FWD = new Vector3(0, 0, 1);
+const arrowDir = new Vector3();
 
 function instanced(
   geo: BufferGeometry,
@@ -74,6 +83,7 @@ export class WorldView {
   private rocks: InstancedMesh | null = null;
   private readonly enemyMeshes: InstancedMesh[];
   private readonly gems: InstancedMesh;
+  private readonly arrows: InstancedMesh;
   private readonly puffs: InstancedMesh;
   private readonly aura: Group;
   private readonly auraRing: Mesh;
@@ -85,10 +95,17 @@ export class WorldView {
     enemyCapacity: number,
     private readonly shadows: boolean,
   ) {
-    const enemyGeos = [slimeGeometry(), skeletonGeometry(), batGeometry()];
-    this.enemyMeshes = ENEMIES.map((def, i) => {
+    const geoByShape = {
+      blob: slimeGeometry,
+      capsule: skeletonGeometry,
+      bat: batGeometry,
+      golem: golemGeometry,
+      archer: archerGeometry,
+      bomb: bombGeometry,
+    };
+    this.enemyMeshes = ENEMIES.map((def) => {
       const mat = new MeshLambertMaterial({ color: def.color, vertexColors: true, flatShading: true });
-      const mesh = instanced(enemyGeos[i % enemyGeos.length], mat, enemyCapacity, shadows);
+      const mesh = instanced(geoByShape[def.shape](), mat, enemyCapacity, shadows);
       mesh.setColorAt(0, WHITE);
       mesh.name = `enemy:${def.id}`;
       this.root.add(mesh);
@@ -128,7 +145,13 @@ export class WorldView {
     this.aura.add(disc, this.auraRing);
     this.aura.visible = false;
 
-    this.root.add(this.gems, this.puffs, this.aura);
+    this.arrows = instanced(
+      arrowGeometry(),
+      new MeshLambertMaterial({ vertexColors: true, emissive: 0x401018, flatShading: true }),
+      256,
+      false,
+    );
+    this.root.add(this.gems, this.puffs, this.aura, this.arrows);
   }
 
   /** Yeni run: araziyi ve statik dekoru yeniden kur. */
@@ -176,6 +199,7 @@ export class WorldView {
   update(world: World, time: number, dt: number): void {
     this.updateEnemies(world, time);
     this.updateGems(world, time);
+    this.updateArrows(world);
     this.updatePuffs(world, dt);
 
     const p = world.player;
@@ -198,9 +222,10 @@ export class WorldView {
       const def = ENEMIES[type];
       const ph = e.phase[i] + time * (4 + e.speed[i]);
       let y = e.y[i] + e.hover[i];
-      let sx = def.scale;
-      let sy = def.scale;
+      let sx = def.scale * e.scale[i];
+      let sy = def.scale * e.scale[i];
       let tilt = 0;
+      let fusing = false;
       switch (def.shape) {
         case 'blob': {
           // Zıplayarak ilerleme + basık/uzun.
@@ -218,9 +243,32 @@ export class WorldView {
           y += Math.sin(ph * 1.7) * 0.3;
           sx *= 0.75 + Math.abs(Math.sin(ph * 3)) * 0.5;
           break;
+        case 'golem':
+          tilt = Math.sin(ph * 0.6) * 0.08;
+          y += Math.abs(Math.sin(ph * 0.6)) * 0.05;
+          break;
+        case 'archer':
+          y += Math.abs(Math.sin(ph)) * 0.05;
+          break;
+        case 'bomb':
+          if (e.timer[i] >= 0) {
+            // Fitil yanıyor: şişer ve yanıp söner.
+            fusing = true;
+            const g = 1 + (1 - e.timer[i] / EXPLODER.fuse) * 0.45;
+            sx *= g;
+            sy *= g;
+          } else {
+            y += Math.abs(Math.sin(ph * 1.2)) * 0.2;
+          }
+          break;
       }
       pos.set(e.x[i], y, e.z[i]);
-      quat.setFromAxisAngle(UP, Math.atan2(e.vx[i], e.vz[i]));
+      // Okçu hep oyuncuya bakar (geri çekilirken bile).
+      const yaw =
+        def.behavior === 'ranged'
+          ? Math.atan2(world.player.x - e.x[i], world.player.z - e.z[i])
+          : Math.atan2(e.vx[i], e.vz[i]);
+      quat.setFromAxisAngle(UP, yaw);
       if (tilt !== 0) {
         quatTilt.setFromAxisAngle(FWD, tilt);
         quat.multiply(quatTilt);
@@ -229,13 +277,30 @@ export class WorldView {
       m4.compose(pos, quat, scl);
       const k = counts[type]++;
       mesh.setMatrixAt(k, m4);
-      mesh.setColorAt(k, e.flash[i] > 0 ? FLASH : WHITE);
+      const blink = fusing && Math.floor(time * 12) % 2 === 0;
+      mesh.setColorAt(k, e.flash[i] > 0 ? FLASH : blink ? FUSE_FLASH : e.elite[i] ? ELITE_TINT : WHITE);
     }
     this.enemyMeshes.forEach((mesh, t) => {
       mesh.count = counts[t];
       mesh.instanceMatrix.needsUpdate = true;
       if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
     });
+  }
+
+  private updateArrows(world: World): void {
+    const s = world.enemyShots;
+    let k = 0;
+    for (let j = 0; j < s.count; j++) {
+      if (s.dead[j]) continue;
+      arrowDir.set(s.vx[j], s.vy[j], s.vz[j]).normalize();
+      quat.setFromUnitVectors(ARROW_FWD, arrowDir);
+      pos.set(s.x[j], s.y[j], s.z[j]);
+      scl.setScalar(1.2);
+      m4.compose(pos, quat, scl);
+      this.arrows.setMatrixAt(k++, m4);
+    }
+    this.arrows.count = k;
+    this.arrows.instanceMatrix.needsUpdate = true;
   }
 
   private updateGems(world: World, time: number): void {

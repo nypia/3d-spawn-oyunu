@@ -159,3 +159,61 @@ export function orbGeometry(): BufferGeometry {
   const rock = new DodecahedronGeometry(0.42, 0);
   return build([[rock, 0xb7a6ff]]);
 }
+
+export function golemGeometry(): BufferGeometry {
+  const body = new DodecahedronGeometry(0.75, 0).scale(1, 1.1, 0.85).translate(0, 1, 0);
+  const head = new DodecahedronGeometry(0.38, 0).translate(0, 1.95, 0.1);
+  const armL = new DodecahedronGeometry(0.32, 0).scale(1, 1.6, 1).translate(-0.85, 0.8, 0.1);
+  const armR = new DodecahedronGeometry(0.32, 0).scale(1, 1.6, 1).translate(0.85, 0.8, 0.1);
+  const eyeL = new SphereGeometry(0.07, 5, 4).translate(-0.14, 2, 0.42);
+  const eyeR = new SphereGeometry(0.07, 5, 4).translate(0.14, 2, 0.42);
+  return build([
+    [body, WHITE],
+    [head, WHITE],
+    [armL, 0xcfc6b8],
+    [armR, 0xcfc6b8],
+    [eyeL, 0xffa21a],
+    [eyeR, 0xffa21a],
+  ]);
+}
+
+export function archerGeometry(): BufferGeometry {
+  const robe = new ConeGeometry(0.45, 1.3, 7).translate(0, 0.65, 0);
+  const head = new SphereGeometry(0.22, 7, 5).translate(0, 1.4, 0);
+  const hood = new ConeGeometry(0.3, 0.55, 7).translate(0, 1.6, -0.03);
+  const eyeL = new SphereGeometry(0.045, 5, 4).translate(-0.08, 1.42, 0.19);
+  const eyeR = new SphereGeometry(0.045, 5, 4).translate(0.08, 1.42, 0.19);
+  const bow = new CylinderGeometry(0.03, 0.03, 1.1, 4).translate(0.38, 1.05, 0.25);
+  return build([
+    [robe, WHITE],
+    [head, 0x2b2b33],
+    [hood, WHITE],
+    [eyeL, 0xffe14d],
+    [eyeR, 0xffe14d],
+    [bow, 0x7a5232],
+  ]);
+}
+
+export function bombGeometry(): BufferGeometry {
+  const body = new IcosahedronGeometry(0.5, 1).translate(0, 0.55, 0);
+  const fuse = new CylinderGeometry(0.06, 0.06, 0.3, 5).translate(0, 1.15, 0);
+  const spark = new IcosahedronGeometry(0.1, 0).translate(0, 1.32, 0);
+  const eyeL = new SphereGeometry(0.08, 6, 4).translate(-0.17, 0.68, 0.42);
+  const eyeR = new SphereGeometry(0.08, 6, 4).translate(0.17, 0.68, 0.42);
+  return build([
+    [body, WHITE],
+    [fuse, 0x3a3a40],
+    [spark, 0xfff2a8],
+    [eyeL, 0xffffff],
+    [eyeR, 0xffffff],
+  ]);
+}
+
+export function arrowGeometry(): BufferGeometry {
+  const shaft = new CylinderGeometry(0.035, 0.035, 0.8, 4).rotateX(Math.PI / 2);
+  const tip = new ConeGeometry(0.09, 0.22, 4).rotateX(Math.PI / 2).translate(0, 0, 0.48);
+  return build([
+    [shaft, 0x8a5a33],
+    [tip, 0xff4d6d],
+  ]);
+}

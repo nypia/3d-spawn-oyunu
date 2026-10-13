@@ -1,6 +1,6 @@
 import type { Rng } from '../../core/Rng';
 import { BALANCE } from '../../data/balance';
-import { ENEMIES, ENEMY_INDEX } from '../../data/enemies';
+import { ELITE, ENEMIES, ENEMY_INDEX } from '../../data/enemies';
 import type { World } from '../world/World';
 
 const S = BALANCE.spawn;
@@ -16,6 +16,7 @@ const S = BALANCE.spawn;
 export class SpawnDirector {
   credit = 0;
   private nextRingEvent: number = S.ringEventInterval;
+  private nextElite: number = ELITE.interval;
   private readonly weights: number[] = ENEMIES.map(() => 0);
 
   constructor(private readonly rng: Rng) {}
@@ -57,10 +58,21 @@ export class SpawnDirector {
       this.spawnRing(world, ENEMY_INDEX.slime, n, 17);
     }
 
+    // Elit: açık türlerden biri (patlayan hariç), büyük ve güçlü; ölünce sandık düşürür.
+    if (t >= this.nextElite) {
+      this.nextElite += ELITE.interval;
+      for (let k = 0; k < ENEMIES.length; k++) {
+        const d = ENEMIES[k];
+        this.weights[k] = t >= d.unlockTime && d.behavior !== 'exploder' ? d.weight : 0;
+      }
+      const type = this.rng.weightedIndex(this.weights);
+      if (type >= 0) this.spawnAroundPlayer(world, type, true);
+    }
+
     this.recycleFarEnemies(world);
   }
 
-  spawnAroundPlayer(world: World, type: number): boolean {
+  spawnAroundPlayer(world: World, type: number, elite = false): boolean {
     const p = world.player;
     const moving = p.speed > 1;
     const base = moving ? Math.atan2(p.vx, p.vz) : 0;
@@ -71,7 +83,7 @@ export class SpawnDirector {
       const z = world.terrain.clampToPlayable(p.z + Math.cos(a) * r);
       // Sınıra çarpıp oyuncunun dibine düştüyse başka açı dene.
       if ((x - p.x) ** 2 + (z - p.z) ** 2 < (S.ringMin * 0.6) ** 2) continue;
-      return world.spawnEnemy(type, x, z) >= 0;
+      return world.spawnEnemy(type, x, z, elite) >= 0;
     }
     return false;
   }

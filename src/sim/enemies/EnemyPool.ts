@@ -30,7 +30,12 @@ export class EnemyPool {
   /** Animasyon fazı (her düşman farklı ritimde sallansın). */
   readonly phase: Float32Array;
   readonly xp: Float32Array;
+  /** Görsel boy çarpanı (elitler büyük). */
+  readonly scale: Float32Array;
+  /** Davranışa özel sayaç: okçuda atış bekleme süresi, patlayanda fitil (−1 = sönük). */
+  readonly timer: Float32Array;
   readonly type: Uint8Array;
+  readonly elite: Uint8Array;
   readonly dead: Uint8Array;
   readonly uid: Int32Array;
 
@@ -55,7 +60,10 @@ export class EnemyPool {
     this.flash = f();
     this.phase = f();
     this.xp = f();
+    this.scale = f();
+    this.timer = f();
     this.type = new Uint8Array(capacity);
+    this.elite = new Uint8Array(capacity);
     this.dead = new Uint8Array(capacity);
     this.uid = new Int32Array(capacity);
   }
@@ -73,6 +81,9 @@ export class EnemyPool {
     this.kz[i] = 0;
     this.contactCd[i] = 0;
     this.flash[i] = 0;
+    this.scale[i] = 1;
+    this.timer[i] = 0;
+    this.elite[i] = 0;
     return i;
   }
 
@@ -103,7 +114,10 @@ export class EnemyPool {
     this.flash[i] = this.flash[last];
     this.phase[i] = this.phase[last];
     this.xp[i] = this.xp[last];
+    this.scale[i] = this.scale[last];
+    this.timer[i] = this.timer[last];
     this.type[i] = this.type[last];
+    this.elite[i] = this.elite[last];
     this.dead[i] = this.dead[last];
     this.uid[i] = this.uid[last];
   }
