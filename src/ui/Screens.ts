@@ -12,6 +12,13 @@ export interface ItemView {
   owned: number;
 }
 
+export interface ShrineView {
+  icon: string;
+  title: string;
+  rarity: number;
+  rarityName: string;
+}
+
 export interface LevelUpActions {
   pick: (i: number) => void;
   banish: (i: number) => void;
@@ -153,6 +160,31 @@ export class Screens {
     );
     if (view.owned > 0) card.append(h('span.card-badge', {}, `Şu an ${view.owned} adet → ${view.owned + 1}`));
     this.show(h('div.panel.reward', {}, h('h2', {}, view.title), card, h('div.buttons', {}, take)));
+  }
+
+  /** Tapınak doldu: üç bonustan birini seç. */
+  showShrine(options: ShrineView[], onPick: (i: number) => void): void {
+    const cards = options.map((o, i) => {
+      const card = h(
+        'button.card',
+        { 'data-testid': `shrine-${i}`, 'data-rarity': String(o.rarity) },
+        h('span.card-key', {}, String(i + 1)),
+        h('span.card-icon', {}, o.icon),
+        h('span.card-title', {}, o.title),
+        h('span.card-rarity', {}, o.rarityName),
+      );
+      card.addEventListener('click', () => onPick(i));
+      return card;
+    });
+    this.show(
+      h(
+        'div.panel.levelup',
+        {},
+        h('h2', {}, 'Tapınak kutsaması'),
+        h('p.subtitle', {}, 'Kalıcı bir bonus seç', h('span.keys-only', {}, ` (1–${options.length})`)),
+        h('div.cards', {}, ...cards),
+      ),
+    );
   }
 
   showPause(onResume: () => void, onRestart: () => void): void {

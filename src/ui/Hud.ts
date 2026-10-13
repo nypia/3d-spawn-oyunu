@@ -52,8 +52,14 @@ export class Hud {
     this.setText('hp', this.hpText, `${Math.ceil(p.hp)} / ${Math.round(p.maxHp)}`);
 
     const chest = world.nearbyChest();
+    const shrine = chest ? null : world.nearbyShrine();
     let hint = '';
-    if (chest) {
+    if (shrine !== null) {
+      hint =
+        shrine > 0
+          ? `⛩️ Tapınak doluyor · %${Math.round(shrine * 100)}`
+          : '⛩️ Tapınak · dolması için içinde dur';
+    } else if (chest) {
       hint = chest.free
         ? '📦 Ödül sandığı · ücretsiz, üstüne yürü'
         : `📦 Sandık · ${chest.price} altın${chest.affordable ? ', üstüne yürü' : ' (altın yetmiyor)'}`;

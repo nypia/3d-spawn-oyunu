@@ -2,6 +2,7 @@ import { Rng } from '../../core/Rng';
 import { BALANCE, xpToNext } from '../../data/balance';
 import { ARCHER, ELITE, ENEMIES, EXPLODER } from '../../data/enemies';
 import { ITEM_FX, ITEM_INDEX, ITEMS } from '../../data/items';
+import { SHRINE, SHRINE_BONUSES } from '../../data/shrines';
 import { TOMES, tomeValue } from '../../data/tomes';
 import { WEAPON_INDEX, WEAPONS } from '../../data/weapons';
 import { Blasts } from '../combat/Blasts';
@@ -18,7 +19,7 @@ import { Stats } from '../stats/Stats';
 import { Heightmap } from '../terrain/Heightmap';
 import { createWeapon, levelUpWeapon, updateWeapon, type WeaponInstance } from '../weapons/Weapons';
 import { EventRing } from './EventRing';
-import { CHEST, Interactables, VASE } from './Interactables';
+import { CHEST, Interactables, SHRINE as SHRINE_KIND, VASE } from './Interactables';
 import { Obstacles } from './Obstacles';
 
 export interface WorldOptions {
@@ -29,7 +30,15 @@ export interface WorldOptions {
   startWeapon?: string;
 }
 
-export type Reward = { kind: 'item'; item: number; rarity: Rarity };
+export interface ShrineOption {
+  bonus: number;
+  rarity: Rarity;
+  value: number;
+}
+
+export type Reward =
+  | { kind: 'item'; item: number; rarity: Rarity }
+  | { kind: 'shrine'; options: ShrineOption[] };
 
 export interface ProjectileSpawn {
   kind: number;
@@ -178,7 +187,7 @@ export class World {
     this.updateEnemyShots(dt);
     this.updateGems(dt);
     this.updatePickups(dt);
-    this.updateInteractables();
+    this.updateInteractables(dt);
     this.director.update(this, dt);
 
     e.removeDead();
@@ -275,12 +284,37 @@ export class World {
     }
   }
 
-  /** Ödülü al (sandık eşyası). */
-  takeReward(): void {
+  /** Ödülü al: sandık eşyası ya da tapınak bonusu (choice = seçilen seçenek). */
+  takeReward(choice = 0): void {
     const r = this.reward;
     if (!r) return;
     if (r.kind === 'item') this.applyItem(r.item);
+    else {
+      const o = r.options[Math.min(choice, r.options.length - 1)];
+      const def = SHRINE_BONUSES[o.bonus];
+      if (def.mode === 'mult') this.stats.addMult(def.stat, o.value);
+      else this.stats.addFlat(def.stat, o.value);
+      if (def.stat === 'maxHp') {
+        this.player.maxHp = this.stats.get('maxHp');
+        this.player.hp = Math.min(this.player.maxHp, this.player.hp + o.value);
+      }
+    }
     this.reward = null;
+  }
+
+  /** Tapınak için tekrarsız, nadirlik zarlı bonus seçenekleri. */
+  rollShrineOptions(): ShrineOption[] {
+    const luck = this.stats.get('luck');
+    const weights = SHRINE_BONUSES.map(() => 1);
+    const out: ShrineOption[] = [];
+    for (let k = 0; k < SHRINE.choices; k++) {
+      const bonus = this.rng.weightedIndex(weights);
+      if (bonus < 0) break;
+      weights[bonus] = 0;
+      const rarity = rollRarity(this.rng, luck);
+      out.push({ bonus, rarity, value: SHRINE_BONUSES[bonus].value * rarityMult(rarity) });
+    }
+    return out;
   }
 
   applyItem(index: number): void {
@@ -374,7 +408,7 @@ export class World {
   }
 
   /** Vazolara çarpınca kırılır; sandığa yürüyünce altın yetiyorsa açılır. */
-  private updateInteractables(): void {
+  private updateInteractables(dt: number): void {
     const it = this.interactables;
     const p = this.player;
     const L = BALANCE.loot;
@@ -382,15 +416,16 @@ export class World {
       if (it.used[i]) continue;
       const d2 = (it.x[i] - p.x) ** 2 + (it.z[i] - p.z) ** 2;
       const y = this.terrain.heightAt(it.x[i], it.z[i]);
-      if (Math.abs(p.y - y) > 2) continue;
-      if (it.kind[i] === VASE && d2 < L.vaseRadius * L.vaseRadius) {
+      // Çok yukarıdan (zıplarken) etkileşim yok; ama tapınağın boşalması yine işlemeli.
+      const level = Math.abs(p.y - y) <= 2;
+      if (it.kind[i] === VASE && level && d2 < L.vaseRadius * L.vaseRadius) {
         it.used[i] = 1;
         this.breakFx.push(it.x[i], y, it.z[i], VASE);
         const coins = this.rng.int(L.vaseGoldMin, L.vaseGoldMax);
         for (let c = 0; c < coins; c++) this.dropPickup(PICKUP_GOLD, it.x[i], y + 0.35, it.z[i], 1);
         if (this.rng.chance(L.vaseHealChance)) this.dropPickup(PICKUP_HEAL, it.x[i], y + 0.4, it.z[i], 1);
         if (this.rng.chance(L.vaseMagnetChance)) this.dropPickup(PICKUP_MAGNET, it.x[i], y + 0.4, it.z[i], 1);
-      } else if (it.kind[i] === CHEST && d2 < L.chestRadius * L.chestRadius && !this.reward) {
+      } else if (it.kind[i] === CHEST && level && d2 < L.chestRadius * L.chestRadius && !this.reward) {
         const free = it.free[i] === 1;
         if (!free && this.gold < this.chestPrice) continue;
         if (!free) {
@@ -402,8 +437,32 @@ export class World {
         this.breakFx.push(it.x[i], y, it.z[i], CHEST);
         const { item, rarity } = this.rollItem();
         this.reward = { kind: 'item', item, rarity };
+      } else if (it.kind[i] === SHRINE_KIND) {
+        // İçinde durdukça dolar, çıkınca yavaşça boşalır.
+        if (level && d2 < SHRINE.radius * SHRINE.radius) {
+          it.charge[i] += dt / SHRINE.chargeTime;
+          if (it.charge[i] >= 1 && !this.reward) {
+            it.charge[i] = 1;
+            it.used[i] = 1;
+            this.breakFx.push(it.x[i], y, it.z[i], SHRINE_KIND);
+            this.reward = { kind: 'shrine', options: this.rollShrineOptions() };
+          }
+        } else if (it.charge[i] > 0) {
+          it.charge[i] = Math.max(0, it.charge[i] - (dt * SHRINE.decayRate) / SHRINE.chargeTime);
+        }
       }
     }
+  }
+
+  /** HUD ipucu için: içinde durulan tapınağın dolumu (yoksa null). */
+  nearbyShrine(): number | null {
+    const it = this.interactables;
+    const p = this.player;
+    for (let i = 0; i < it.count; i++) {
+      if (it.used[i] || it.kind[i] !== SHRINE_KIND) continue;
+      if ((it.x[i] - p.x) ** 2 + (it.z[i] - p.z) ** 2 <= (SHRINE.radius + 2) ** 2) return it.charge[i];
+    }
+    return null;
   }
 
   /** HUD ipucu için: 4 m içindeki kapalı sandık (yoksa null). */

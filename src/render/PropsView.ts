@@ -1,14 +1,18 @@
 import {
   type BufferGeometry,
+  CircleGeometry,
   Color,
   DynamicDrawUsage,
   Group,
   InstancedMesh,
   Matrix4,
+  MeshBasicMaterial,
   MeshLambertMaterial,
   Quaternion,
+  RingGeometry,
   Vector3,
 } from 'three';
+import { SHRINE as SHRINE_CFG } from '../data/shrines';
 import { PICKUP_GOLD, PICKUP_HEAL, PICKUP_MAGNET } from '../sim/pickups/PickupPool';
 import { CHEST, SHRINE, VASE } from '../sim/world/Interactables';
 import type { World } from '../sim/world/World';
@@ -55,6 +59,9 @@ export class PropsView {
   private readonly coins: InstancedMesh;
   private readonly heals: InstancedMesh;
   private readonly magnets: InstancedMesh;
+  /** Tapınak alanı halkası ve dolum diski. */
+  private readonly shrineRings: InstancedMesh;
+  private readonly shrineFills: InstancedMesh;
 
   constructor(shadows: boolean) {
     this.vases = instanced(vaseGeometry(), 128, shadows);
@@ -66,7 +73,32 @@ export class PropsView {
     this.coins.material = new MeshLambertMaterial({ color: 0xffcf33, emissive: 0x6b4a00, flatShading: true });
     this.heals = instanced(healGeometry(), 64, false, 0x301008);
     this.magnets = instanced(magnetGeometry(), 32, false, 0x300000);
-    this.root.add(this.vases, this.chests, this.shrines, this.coins, this.heals, this.magnets);
+    const flat = { color: 0x7fe3ff, transparent: true, depthWrite: false };
+    this.shrineRings = new InstancedMesh(
+      new RingGeometry(0.93, 1, 48).rotateX(-Math.PI / 2),
+      new MeshBasicMaterial({ ...flat, opacity: 0.75 }),
+      16,
+    );
+    this.shrineFills = new InstancedMesh(
+      new CircleGeometry(1, 40).rotateX(-Math.PI / 2),
+      new MeshBasicMaterial({ ...flat, opacity: 0.22 }),
+      16,
+    );
+    for (const m of [this.shrineRings, this.shrineFills]) {
+      m.instanceMatrix.setUsage(DynamicDrawUsage);
+      m.frustumCulled = false;
+      m.count = 0;
+    }
+    this.root.add(
+      this.vases,
+      this.chests,
+      this.shrines,
+      this.coins,
+      this.heals,
+      this.magnets,
+      this.shrineRings,
+      this.shrineFills,
+    );
   }
 
   update(world: World, time: number): void {
@@ -74,6 +106,7 @@ export class PropsView {
     let nv = 0;
     let nc = 0;
     let ns = 0;
+    let nr = 0;
     for (let i = 0; i < it.count; i++) {
       const kind = it.kind[i];
       if (it.used[i] && kind !== SHRINE) continue;
@@ -96,11 +129,27 @@ export class PropsView {
         this.shrines.setMatrixAt(ns, m4);
         this.shrines.setColorAt(ns, it.used[i] ? SHRINE_USED : SHRINE_GLOW);
         ns++;
+        if (!it.used[i]) {
+          // Alan halkası (hafif nabız) + dolum diski.
+          quat.identity();
+          pos.y = y + 0.08;
+          scl.setScalar(SHRINE_CFG.radius * (1 + Math.sin(time * 3) * 0.02));
+          m4.compose(pos, quat, scl);
+          this.shrineRings.setMatrixAt(nr, m4);
+          scl.setScalar(Math.max(0.001, SHRINE_CFG.radius * it.charge[i]));
+          m4.compose(pos, quat, scl);
+          this.shrineFills.setMatrixAt(nr, m4);
+          nr++;
+        }
       }
     }
     this.vases.count = nv;
     this.chests.count = nc;
     this.shrines.count = ns;
+    this.shrineRings.count = nr;
+    this.shrineFills.count = nr;
+    this.shrineRings.instanceMatrix.needsUpdate = true;
+    this.shrineFills.instanceMatrix.needsUpdate = true;
     for (const m of [this.vases, this.chests, this.shrines]) {
       m.instanceMatrix.needsUpdate = true;
       if (m.instanceColor) m.instanceColor.needsUpdate = true;

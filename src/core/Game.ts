@@ -1,5 +1,6 @@
 import { BALANCE } from '../data/balance';
 import { ITEMS } from '../data/items';
+import { SHRINE_BONUSES } from '../data/shrines';
 import { DebugOverlay } from '../debug/DebugOverlay';
 import { detectQuality, isTouchDevice, type QualitySettings } from '../render/Quality';
 import { Renderer3D } from '../render/Renderer3D';
@@ -110,7 +111,7 @@ export class Game {
     const inp = this.input;
     for (const code of ['KeyE', 'Enter']) {
       inp.onKey(code, () => {
-        if (this.state === 'reward') this.takeReward();
+        if (this.state === 'reward' && this.world.reward?.kind === 'item') this.takeReward(0);
       });
     }
     inp.onKey('KeyR', () => {
@@ -128,6 +129,7 @@ export class Game {
     ] as const) {
       inp.onKey(code, () => {
         if (this.state === 'levelup') this.pick(i);
+        else if (this.state === 'reward' && this.world.reward?.kind === 'shrine') this.takeReward(i);
       });
     }
     inp.onLockChange = (locked) => {
@@ -207,6 +209,21 @@ export class Game {
     if (!r) return;
     this.setState('reward');
     this.input.exitLock();
+    if (r.kind === 'shrine') {
+      this.screens.showShrine(
+        r.options.map((o) => {
+          const def = SHRINE_BONUSES[o.bonus];
+          return {
+            icon: def.icon,
+            title: def.describe(o.value),
+            rarity: o.rarity,
+            rarityName: RARITIES[o.rarity].name,
+          };
+        }),
+        (i) => this.takeReward(i),
+      );
+      return;
+    }
     const def = ITEMS[r.item];
     this.screens.showItem(
       {
@@ -218,12 +235,12 @@ export class Game {
         rarityName: RARITIES[r.rarity].name,
         owned: this.world.itemCounts[r.item],
       },
-      () => this.takeReward(),
+      () => this.takeReward(0),
     );
   }
 
-  private takeReward(): void {
-    this.world.takeReward();
+  private takeReward(choice: number): void {
+    this.world.takeReward(choice);
     if (this.world.offer) this.showLevelUp();
     else this.resume();
   }
