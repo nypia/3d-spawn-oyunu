@@ -55,8 +55,8 @@ export class SpawnDirector {
     // Kuşatma halkası
     if (t >= this.nextRingEvent) {
       this.nextRingEvent += S.ringEventInterval;
-      const n = Math.round(16 + 6 * (t / 60));
-      this.spawnRing(world, ENEMY_INDEX.slime, n, 17);
+      const n = Math.round(S.ringBase + S.ringPerMinute * (t / 60));
+      this.spawnRing(world, ENEMY_INDEX.slime, n, S.ringRadius);
     }
 
     // Elit: açık türlerden biri (patlayan hariç), büyük ve güçlü; ölünce sandık düşürür.

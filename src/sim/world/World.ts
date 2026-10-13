@@ -152,7 +152,12 @@ export class World {
     this.obstacles = new Obstacles(mapRng, this.terrain, 380, 140);
     this.interactables.populate(mapRng, this.terrain, this.obstacles, 12, 8, 22);
 
-    this.stats = new Stats({ maxHp: PB.baseHp, moveSpeed: PB.baseMoveSpeed, pickupRange: PB.pickupRange });
+    this.stats = new Stats({
+      maxHp: PB.baseHp,
+      regen: PB.baseRegen,
+      moveSpeed: PB.baseMoveSpeed,
+      pickupRange: PB.pickupRange,
+    });
     this.enemies = new EnemyPool(Math.max(1200, this.enemyCap));
     this.enemyGrid = new SpatialGrid(A.size, 4, this.enemies.capacity);
     this.director = new SpawnDirector(this.rng);

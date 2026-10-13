@@ -78,7 +78,7 @@ export class Screens {
       'div.panel.start',
       {},
       h('h1.title', {}, 'SPAWN'),
-      h('p.subtitle', {}, '3D survivors-like · prototip v0.1'),
+      h('p.subtitle', {}, '3D survivors-like · prototip v0.2'),
       h('p.lead', {}, 'Silahların otomatik saldırır. Hayatta kal, XP topla, güçlen.'),
       controls,
       play,

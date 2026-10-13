@@ -8,9 +8,22 @@
 | Aşama | Durum |
 |---|---|
 | M0 — İskelet | ✅ Tamam |
-| M1 — Oynanabilir prototip | ✅ Tamam (2 silah, 7 kitap, 3 düşman; primitive modeller) |
-| M2 — Çekirdek sistemler | ⏳ Sırada |
-| M3–M7 | Planlandı |
+| M1 — Oynanabilir prototip | ✅ Tamam |
+| M2 — Çekirdek sistemler | ✅ Tamam: 8 silah, 8 kitap, nadirlik, yenile/yasakla/atla, 6 düşman + elit, altın, vazo, sandık, 10 eşya, tapınak, hasar sayıları |
+| M5 (kısmen) — Dokunmatik kontroller | ✅ Öne alındı: joystick, kamera sürükleme, ZIPLA/KAY, otomatik kamera, kısa ekran düzeni |
+| M3 — Görsel ve ses | ⏳ Sırada |
+| M4, M5'in kalanı, M6, M7 | Planlandı |
+
+**Oynanabilir sürüm:** claude.ai Artifact olarak yayınlanıyor (`npm run build:artifact`). three.js
+jsDelivr CDN'den yüklenir, geri kalan her şey tek HTML dosyasına gömülür. Artifact'a query string
+ulaşmadığı için hata ayıklama bayrakları hash ile verilir (`#debug`, `#low`, `#seed42`, `#bench`).
+
+### M2'de netleşen sayılar (denge turu sonrası)
+- XP eğrisi `6 · n^1.35`; spawn kredisi `0.9 + 0.85·dk + 0.12·dk²`; düşman canı `+%16/dk`, hasarı `+%8/dk`.
+- Kuşatma halkası her dakika `12 + 5·dk` balçık (20 m). Elit her 75 sn.
+- Taban can yenilenmesi 0.25/sn. Sandık 20 altından başlar, her açılışta ×1.4.
+- Düşmanlardan kaçan ve XP toplayan bir botla ölçüldü: 9. dakikada ~21. seviye, ekranda 150–600 düşman.
+  Normal botlar seed'e ve silah seçimine göre 3–15. dakika arasında ölüyor.
 
 ## Bağlam
 

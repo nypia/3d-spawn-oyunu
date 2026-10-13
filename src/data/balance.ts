@@ -20,6 +20,8 @@ export const BALANCE = {
     radius: 0.5,
     height: 1.8,
     baseHp: 100,
+    /** Taban can yenilenmesi (can/sn). */
+    baseRegen: 0.25,
     baseMoveSpeed: 7,
     groundAccel: 70,
     airAccel: 22,
@@ -43,8 +45,8 @@ export const BALANCE = {
 
   xp: {
     /** xpToNext(n) = round(base * n^exp) */
-    base: 8,
-    exp: 1.4,
+    base: 6,
+    exp: 1.35,
     gemCapacity: 2500,
     magnetBaseSpeed: 9,
     magnetAccel: 45,
@@ -60,12 +62,15 @@ export const BALANCE = {
     /** Saniye başına kredi: a + b·dk + c·dk² */
     creditA: 0.9,
     creditB: 0.85,
-    creditC: 0.07,
+    creditC: 0.12,
     maxStoredCredit: 40,
-    hpPerMinute: 0.12,
-    damagePerMinute: 0.06,
-    /** Kuşatma halkası olayı aralığı (s). */
+    hpPerMinute: 0.16,
+    damagePerMinute: 0.08,
+    /** Kuşatma halkası olayı aralığı (s), boyutu (a + b·dk düşman) ve yarıçapı (m). */
     ringEventInterval: 60,
+    ringBase: 12,
+    ringPerMinute: 5,
+    ringRadius: 20,
   },
 
   loot: {
