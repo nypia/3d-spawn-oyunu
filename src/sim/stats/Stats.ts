@@ -16,6 +16,11 @@ export const STAT_KEYS = [
   'xpGain',
   'luck',
   'knockback',
+  'goldGain',
+  /** Lanet: spawn yoğunluğunu artırır (1 + curse çarpanı). */
+  'curse',
+  /** Kayma gücü: kayma hızı çarpanı. */
+  'slidePower',
 ] as const;
 
 export type StatKey = (typeof STAT_KEYS)[number];
@@ -70,6 +75,9 @@ export const DEFAULT_BASE: StatBlock = {
   xpGain: 1,
   luck: 0,
   knockback: 1,
+  goldGain: 1,
+  curse: 0,
+  slidePower: 1,
 };
 
 function zeroBlock(): StatBlock {

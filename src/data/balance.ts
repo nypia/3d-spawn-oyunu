@@ -68,6 +68,22 @@ export const BALANCE = {
     ringEventInterval: 60,
   },
 
+  loot: {
+    /** Düşmanın altın düşürme ihtimali. */
+    goldDropChance: 0.08,
+    chestBasePrice: 20,
+    /** Her açılışta fiyat çarpanı. */
+    chestPriceGrowth: 1.4,
+    chestRadius: 1.6,
+    vaseRadius: 1.1,
+    vaseGoldMin: 1,
+    vaseGoldMax: 4,
+    vaseHealChance: 0.1,
+    vaseMagnetChance: 0.03,
+    healAmount: 25,
+    pickupCapacity: 400,
+  },
+
   levelUp: {
     choices: 3,
     weaponSlots: 4,

@@ -1,6 +1,7 @@
 import { Rng } from '../../core/Rng';
 import { BALANCE, xpToNext } from '../../data/balance';
 import { ARCHER, ELITE, ENEMIES, EXPLODER } from '../../data/enemies';
+import { ITEM_FX, ITEM_INDEX, ITEMS } from '../../data/items';
 import { TOMES, tomeValue } from '../../data/tomes';
 import { WEAPON_INDEX, WEAPONS } from '../../data/weapons';
 import { Blasts } from '../combat/Blasts';
@@ -8,14 +9,16 @@ import { PF_GROUND_FOLLOW, PF_RETURNING, PF_RETURNS, ProjectilePool } from '../c
 import { EnemyPool } from '../enemies/EnemyPool';
 import { SpawnDirector } from '../enemies/SpawnDirector';
 import { GemPool } from '../pickups/GemPool';
+import { PICKUP_GOLD, PICKUP_HEAL, PICKUP_MAGNET, PickupPool } from '../pickups/PickupPool';
 import { Player, type PlayerInput } from '../player/Player';
-import { rarityMult } from '../progression/Rarity';
+import { type Rarity, rarityMult, rollRarity } from '../progression/Rarity';
 import { rollUpgrades, type UpgradeOption, upgradeKey } from '../progression/Upgrades';
 import { SpatialGrid } from '../spatial/SpatialGrid';
 import { Stats } from '../stats/Stats';
 import { Heightmap } from '../terrain/Heightmap';
 import { createWeapon, levelUpWeapon, updateWeapon, type WeaponInstance } from '../weapons/Weapons';
 import { EventRing } from './EventRing';
+import { CHEST, Interactables, VASE } from './Interactables';
 import { Obstacles } from './Obstacles';
 
 export interface WorldOptions {
@@ -25,6 +28,8 @@ export interface WorldOptions {
   godMode?: boolean;
   startWeapon?: string;
 }
+
+export type Reward = { kind: 'item'; item: number; rarity: Rarity };
 
 export interface ProjectileSpawn {
   kind: number;
@@ -62,6 +67,10 @@ export class World {
   /** Düşman mermileri (Okçu); sadece oyuncuya çarpar. */
   readonly enemyShots = new ProjectilePool(256);
   readonly gems = new GemPool(XB.gemCapacity);
+  readonly pickups = new PickupPool(BALANCE.loot.pickupCapacity);
+  readonly interactables = new Interactables(256);
+  /** Eşya başına sahip olunan kopya sayısı (ITEMS sırasıyla). */
+  readonly itemCounts: number[] = ITEMS.map(() => 0);
   readonly enemyGrid: SpatialGrid;
   readonly director: SpawnDirector;
   readonly weapons: WeaponInstance[] = [];
@@ -76,6 +85,8 @@ export class World {
   readonly beamFx = new EventRing(128, 6);
   /** Patlama: x,y,z,yarıçap */
   readonly blastFx = new EventRing(64, 4);
+  /** Kırılma/açılma: x,y,z,tür (Interactables türü) */
+  readonly breakFx = new EventRing(32, 4);
   readonly blasts = new Blasts(48);
 
   enemyCap: number;
@@ -95,6 +106,12 @@ export class World {
   auraRadius = 0;
   damageDealt = 0;
   eliteKills = 0;
+  chestPrice: number = BALANCE.loot.chestBasePrice;
+  chestsOpened = 0;
+  /** Sandık/tapınak ödülü: doluysa oyun durur, oyuncu alır. */
+  reward: Reward | null = null;
+  /** Kalkan Muskası bekleme süresi. */
+  shieldCooldown = 0;
   gold = 0;
 
   /** Run başına seviye atlama hakları. */
@@ -124,6 +141,7 @@ export class World {
       spawnFlatRadius: A.spawnFlatRadius,
     });
     this.obstacles = new Obstacles(mapRng, this.terrain, 380, 140);
+    this.interactables.populate(mapRng, this.terrain, this.obstacles, 12, 8, 22);
 
     this.stats = new Stats({ maxHp: PB.baseHp, moveSpeed: PB.baseMoveSpeed, pickupRange: PB.pickupRange });
     this.enemies = new EnemyPool(Math.max(1200, this.enemyCap));
@@ -136,7 +154,7 @@ export class World {
   }
 
   get paused(): boolean {
-    return this.gameOver || this.offer !== null;
+    return this.gameOver || this.offer !== null || this.reward !== null;
   }
 
   step(input: PlayerInput, dt: number): void {
@@ -159,12 +177,16 @@ export class World {
     this.updateEnemies(dt);
     this.updateEnemyShots(dt);
     this.updateGems(dt);
+    this.updatePickups(dt);
+    this.updateInteractables();
     this.director.update(this, dt);
 
     e.removeDead();
     this.projectiles.removeDead();
     this.enemyShots.removeDead();
     this.gems.removeDead();
+    this.pickups.removeDead();
+    this.shieldCooldown = Math.max(0, this.shieldCooldown - dt);
 
     p.maxHp = this.stats.get('maxHp');
     p.hp = Math.min(p.maxHp, p.hp + this.stats.get('regen') * dt);
@@ -253,6 +275,150 @@ export class World {
     }
   }
 
+  /** Ödülü al (sandık eşyası). */
+  takeReward(): void {
+    const r = this.reward;
+    if (!r) return;
+    if (r.kind === 'item') this.applyItem(r.item);
+    this.reward = null;
+  }
+
+  applyItem(index: number): void {
+    const def = ITEMS[index];
+    this.itemCounts[index]++;
+    for (const s of def.stats ?? []) {
+      if (s.mode === 'mult') this.stats.addMult(s.stat, s.value);
+      else this.stats.addFlat(s.stat, s.value);
+    }
+    this.player.maxHp = this.stats.get('maxHp');
+  }
+
+  /** Nadirlik zarına göre eşya seçer; o kademede eşya yoksa bir alt kademeye iner. */
+  rollItem(): { item: number; rarity: Rarity } {
+    let rarity = rollRarity(this.rng, this.stats.get('luck'));
+    for (;;) {
+      const pool = ITEMS.map((d, i) => (d.rarity === rarity ? i : -1)).filter((i) => i >= 0);
+      if (pool.length > 0 || rarity === 0) return { item: this.rng.pick(pool), rarity };
+      rarity = (rarity - 1) as Rarity;
+    }
+  }
+
+  /**
+   * Oyuncuya hasar: Kalkan Muskası hazırsa vuruşu yutar. Verilen gerçek hasarı döner.
+   */
+  hurtPlayer(amount: number): number {
+    const amulets = this.itemCounts[ITEM_INDEX.amulet];
+    if (amulets > 0 && this.shieldCooldown <= 0) {
+      this.shieldCooldown = Math.max(
+        ITEM_FX.amuletMin,
+        ITEM_FX.amuletCooldown - ITEM_FX.amuletPerCopy * (amulets - 1),
+      );
+      return 0;
+    }
+    return this.player.takeDamage(amount, this.stats.get('armor'));
+  }
+
+  dropPickup(kind: number, x: number, y: number, z: number, value: number): void {
+    // Küçük saçılma: aynı yere düşen paralar üst üste binmesin.
+    const a = this.rng.range(0, Math.PI * 2);
+    const r = this.rng.range(0.2, 0.9);
+    this.pickups.add(kind, x + Math.sin(a) * r, y, z + Math.cos(a) * r, value);
+  }
+
+  private updatePickups(dt: number): void {
+    const g = this.pickups;
+    const p = this.player;
+    const range = this.stats.get('pickupRange');
+    const ty = p.y + 0.8;
+    const collect2 = XB.collectRadius * XB.collectRadius;
+    for (let i = 0; i < g.count; i++) {
+      if (g.dead[i]) continue;
+      const dx = p.x - g.x[i];
+      const dy = ty - g.y[i];
+      const dz = p.z - g.z[i];
+      if (g.pull[i] === 0) {
+        if (dx * dx + dz * dz < range * range) g.pull[i] = XB.magnetBaseSpeed;
+        else continue;
+      }
+      const d2 = dx * dx + dy * dy + dz * dz;
+      if (d2 < collect2) {
+        g.dead[i] = 1;
+        this.collectPickup(g.kind[i], g.value[i]);
+        continue;
+      }
+      g.pull[i] += XB.magnetAccel * dt;
+      const d = Math.sqrt(d2);
+      const step = Math.min(d, g.pull[i] * dt);
+      g.x[i] += (dx / d) * step;
+      g.y[i] += (dy / d) * step;
+      g.z[i] += (dz / d) * step;
+    }
+  }
+
+  private collectPickup(kind: number, value: number): void {
+    const p = this.player;
+    switch (kind) {
+      case PICKUP_GOLD:
+        this.gold += value * this.stats.get('goldGain');
+        break;
+      case PICKUP_HEAL:
+        p.hp = Math.min(p.maxHp, p.hp + BALANCE.loot.healAmount);
+        break;
+      case PICKUP_MAGNET: {
+        // Haritadaki tüm XP taşlarını çek.
+        const gm = this.gems;
+        for (let j = 0; j < gm.count; j++) if (gm.pull[j] === 0) gm.pull[j] = XB.magnetBaseSpeed;
+        break;
+      }
+    }
+  }
+
+  /** Vazolara çarpınca kırılır; sandığa yürüyünce altın yetiyorsa açılır. */
+  private updateInteractables(): void {
+    const it = this.interactables;
+    const p = this.player;
+    const L = BALANCE.loot;
+    for (let i = 0; i < it.count; i++) {
+      if (it.used[i]) continue;
+      const d2 = (it.x[i] - p.x) ** 2 + (it.z[i] - p.z) ** 2;
+      const y = this.terrain.heightAt(it.x[i], it.z[i]);
+      if (Math.abs(p.y - y) > 2) continue;
+      if (it.kind[i] === VASE && d2 < L.vaseRadius * L.vaseRadius) {
+        it.used[i] = 1;
+        this.breakFx.push(it.x[i], y, it.z[i], VASE);
+        const coins = this.rng.int(L.vaseGoldMin, L.vaseGoldMax);
+        for (let c = 0; c < coins; c++) this.dropPickup(PICKUP_GOLD, it.x[i], y + 0.35, it.z[i], 1);
+        if (this.rng.chance(L.vaseHealChance)) this.dropPickup(PICKUP_HEAL, it.x[i], y + 0.4, it.z[i], 1);
+        if (this.rng.chance(L.vaseMagnetChance)) this.dropPickup(PICKUP_MAGNET, it.x[i], y + 0.4, it.z[i], 1);
+      } else if (it.kind[i] === CHEST && d2 < L.chestRadius * L.chestRadius && !this.reward) {
+        const free = it.free[i] === 1;
+        if (!free && this.gold < this.chestPrice) continue;
+        if (!free) {
+          this.gold -= this.chestPrice;
+          this.chestPrice = Math.round(this.chestPrice * L.chestPriceGrowth);
+        }
+        it.used[i] = 1;
+        this.chestsOpened++;
+        this.breakFx.push(it.x[i], y, it.z[i], CHEST);
+        const { item, rarity } = this.rollItem();
+        this.reward = { kind: 'item', item, rarity };
+      }
+    }
+  }
+
+  /** HUD ipucu için: 4 m içindeki kapalı sandık (yoksa null). */
+  nearbyChest(): { price: number; free: boolean; affordable: boolean } | null {
+    const it = this.interactables;
+    const p = this.player;
+    for (let i = 0; i < it.count; i++) {
+      if (it.used[i] || it.kind[i] !== CHEST) continue;
+      if ((it.x[i] - p.x) ** 2 + (it.z[i] - p.z) ** 2 > 16) continue;
+      const free = it.free[i] === 1;
+      return { price: this.chestPrice, free, affordable: free || this.gold >= this.chestPrice };
+    }
+    return null;
+  }
+
   addXp(amount: number): void {
     this.xp += amount * this.stats.get('xpGain');
     while (this.xp >= this.xpNext) {
@@ -297,7 +463,6 @@ export class World {
     const tmp = this.tmp2;
     const knockDecay = Math.exp(-7 * dt);
     const pr = PB.radius;
-    const armor = this.stats.get('armor');
 
     for (let i = 0; i < e.count; i++) {
       if (e.dead[i]) continue;
@@ -412,7 +577,11 @@ export class World {
         p.z += (cz / d) * overlap * 0.3;
         if (e.contactCd[i] <= 0) {
           e.contactCd[i] = PB.contactCooldown;
-          p.takeDamage(e.damage[i], armor);
+          const dealt = this.hurtPlayer(e.damage[i]);
+          const thorns = this.itemCounts[ITEM_INDEX.thorns];
+          if (thorns > 0 && dealt > 0) {
+            this.damageEnemy(i, (dealt * ITEM_FX.thornsMult * thorns) / this.stats.get('damage'), -cx, -cz);
+          }
         }
       }
     }
@@ -441,9 +610,27 @@ export class World {
     const e = this.enemies;
     e.dead[i] = 1;
     this.kills++;
-    if (e.elite[i]) this.eliteKills++;
-    const gy = this.terrain.heightAt(e.x[i], e.z[i]) + 0.35;
-    this.gems.add(e.x[i], gy, e.z[i], e.xp[i]);
+    const x = e.x[i];
+    const z = e.z[i];
+    const gy = this.terrain.heightAt(x, z) + 0.35;
+    this.gems.add(x, gy, z, e.xp[i]);
+    if (e.elite[i]) {
+      // Elit: ücretsiz ödül sandığı + biraz altın.
+      this.eliteKills++;
+      this.interactables.add(CHEST, x, z, this.rng.range(0, Math.PI * 2), true);
+      for (let c = 0; c < 3; c++) this.dropPickup(PICKUP_GOLD, x, gy, z, 2);
+    } else if (this.rng.chance(BALANCE.loot.goldDropChance)) {
+      this.dropPickup(PICKUP_GOLD, x, gy, z, 1);
+    }
+    const fang = this.itemCounts[ITEM_INDEX.fang];
+    if (fang > 0 && this.rng.chance(ITEM_FX.fangChance * fang)) {
+      this.player.hp = Math.min(this.player.maxHp, this.player.hp + ITEM_FX.fangHeal);
+    }
+    const skull = this.itemCounts[ITEM_INDEX.skull];
+    if (skull > 0 && this.rng.chance(ITEM_FX.skullChance * skull)) {
+      // Patlamayı kuyruğa al (zincirleme patlamalar özyineleme yapmasın).
+      this.addBlast(x, z, ITEM_FX.skullRadius, ITEM_FX.skullDamage, 3, 0.05);
+    }
     this.deathFx.push(e.x[i], e.y[i] + e.hover[i], e.z[i], e.type[i]);
   }
 
@@ -454,9 +641,7 @@ export class World {
     e.dead[i] = 1;
     this.blastFx.push(e.x[i], e.y[i], e.z[i], EXPLODER.radius);
     const d = Math.hypot(p.x - e.x[i], p.z - e.z[i]);
-    if (d < EXPLODER.radius + PB.radius && Math.abs(p.y - e.y[i]) < 2.5) {
-      p.takeDamage(e.damage[i], this.stats.get('armor'));
-    }
+    if (d < EXPLODER.radius + PB.radius && Math.abs(p.y - e.y[i]) < 2.5) this.hurtPlayer(e.damage[i]);
   }
 
   private fireEnemyShot(i: number): void {
@@ -487,7 +672,6 @@ export class World {
   private updateEnemyShots(dt: number): void {
     const s = this.enemyShots;
     const p = this.player;
-    const armor = this.stats.get('armor');
     for (let j = 0; j < s.count; j++) {
       if (s.dead[j]) continue;
       s.life[j] -= dt;
@@ -504,7 +688,7 @@ export class World {
         s.y[j] > p.y - 0.2 &&
         s.y[j] < p.y + PB.height
       ) {
-        p.takeDamage(s.damage[j], armor);
+        this.hurtPlayer(s.damage[j]);
         s.dead[j] = 1;
       }
     }

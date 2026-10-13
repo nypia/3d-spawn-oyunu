@@ -2,6 +2,16 @@ import type { UpgradeView } from '../sim/progression/Upgrades';
 import type { World } from '../sim/world/World';
 import { formatTime, h } from './dom';
 
+export interface ItemView {
+  title: string;
+  icon: string;
+  name: string;
+  description: string;
+  rarity: number;
+  rarityName: string;
+  owned: number;
+}
+
 export interface LevelUpActions {
   pick: (i: number) => void;
   banish: (i: number) => void;
@@ -122,6 +132,27 @@ export class Screens {
         banInfo,
       ),
     );
+  }
+
+  /** Sandıktan çıkan eşya: nadirlik renkli kart + AL butonu. */
+  showItem(view: ItemView, onTake: () => void): void {
+    const take = h(
+      'button.btn.btn-primary',
+      { 'data-testid': 'take' },
+      'AL',
+      h('span.keys-only', {}, ' (E)'),
+    );
+    take.addEventListener('click', onTake);
+    const card = h(
+      'div.card.item-card',
+      { 'data-rarity': String(view.rarity) },
+      h('span.card-icon', {}, view.icon),
+      h('span.card-title', {}, view.name),
+      h('span.card-desc', {}, view.description),
+      h('span.card-rarity', {}, view.rarityName),
+    );
+    if (view.owned > 0) card.append(h('span.card-badge', {}, `Şu an ${view.owned} adet → ${view.owned + 1}`));
+    this.show(h('div.panel.reward', {}, h('h2', {}, view.title), card, h('div.buttons', {}, take)));
   }
 
   showPause(onResume: () => void, onRestart: () => void): void {

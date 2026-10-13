@@ -36,7 +36,8 @@ export class SpawnDirector {
 
   update(world: World, dt: number): void {
     const t = world.time;
-    this.credit = Math.min(S.maxStoredCredit, this.credit + this.creditRate(t) * dt);
+    const curse = 1 + Math.max(0, world.stats.get('curse'));
+    this.credit = Math.min(S.maxStoredCredit, this.credit + this.creditRate(t) * curse * dt);
 
     // Krediyi harca
     let guard = 64;

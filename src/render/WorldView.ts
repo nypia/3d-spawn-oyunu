@@ -15,6 +15,7 @@ import {
   Vector3,
 } from 'three';
 import { ENEMIES, EXPLODER } from '../data/enemies';
+import { CHEST } from '../sim/world/Interactables';
 import { OBSTACLE_ROCK, OBSTACLE_TREE } from '../sim/world/Obstacles';
 import type { World } from '../sim/world/World';
 import {
@@ -90,6 +91,7 @@ export class WorldView {
   private readonly puffList: Puff[] = [];
   private deathCursor = 0;
   private blastCursor = 0;
+  private breakCursor = 0;
 
   constructor(
     enemyCapacity: number,
@@ -194,6 +196,7 @@ export class WorldView {
     this.puffList.length = 0;
     this.deathCursor = world.deathFx.written;
     this.blastCursor = world.blastFx.written;
+    this.breakCursor = world.breakFx.written;
   }
 
   update(world: World, time: number, dt: number): void {
@@ -345,6 +348,18 @@ export class WorldView {
         t: 0,
         color: 0xff8a3d,
         size: d[o + 3] * 0.9,
+      });
+    });
+    this.breakCursor = world.breakFx.drain(this.breakCursor, (d, o) => {
+      if (this.puffList.length >= 256) this.puffList.shift();
+      const chest = d[o + 3] === CHEST;
+      this.puffList.push({
+        x: d[o],
+        y: d[o + 1] + 0.5,
+        z: d[o + 2],
+        t: 0,
+        color: chest ? 0xffd54a : 0xc8743f,
+        size: chest ? 1.6 : 0.9,
       });
     });
     let k = 0;

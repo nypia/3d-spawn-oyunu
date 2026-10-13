@@ -1,8 +1,10 @@
 import { BALANCE } from '../data/balance';
+import { ITEMS } from '../data/items';
 import { DebugOverlay } from '../debug/DebugOverlay';
 import { detectQuality, isTouchDevice, type QualitySettings } from '../render/Quality';
 import { Renderer3D } from '../render/Renderer3D';
 import type { PlayerInput } from '../sim/player/Player';
+import { RARITIES } from '../sim/progression/Rarity';
 import { describeUpgrade } from '../sim/progression/Upgrades';
 import { World } from '../sim/world/World';
 import { Hud } from '../ui/Hud';
@@ -12,7 +14,7 @@ import { type Flags, readFlags } from './flags';
 import { Input } from './Input';
 import { randomSeed } from './Rng';
 
-type State = 'menu' | 'playing' | 'levelup' | 'paused' | 'gameover';
+type State = 'menu' | 'playing' | 'levelup' | 'reward' | 'paused' | 'gameover';
 
 const STEP = BALANCE.simStep;
 const MAX_STEPS_PER_FRAME = 5;
@@ -106,6 +108,11 @@ export class Game {
 
   private bindKeys(): void {
     const inp = this.input;
+    for (const code of ['KeyE', 'Enter']) {
+      inp.onKey(code, () => {
+        if (this.state === 'reward') this.takeReward();
+      });
+    }
     inp.onKey('KeyR', () => {
       if (this.state === 'levelup') this.reroll();
     });
@@ -195,6 +202,32 @@ export class Game {
     );
   }
 
+  private showReward(): void {
+    const r = this.world.reward;
+    if (!r) return;
+    this.setState('reward');
+    this.input.exitLock();
+    const def = ITEMS[r.item];
+    this.screens.showItem(
+      {
+        title: 'Sandık açıldı!',
+        icon: def.icon,
+        name: def.name,
+        description: def.description,
+        rarity: r.rarity,
+        rarityName: RARITIES[r.rarity].name,
+        owned: this.world.itemCounts[r.item],
+      },
+      () => this.takeReward(),
+    );
+  }
+
+  private takeReward(): void {
+    this.world.takeReward();
+    if (this.world.offer) this.showLevelUp();
+    else this.resume();
+  }
+
   private reroll(): void {
     if (this.world.reroll()) this.showLevelUp();
   }
@@ -256,6 +289,8 @@ export class Game {
           this.world = this.createWorld();
           this.startRun();
         });
+      } else if (w.reward) {
+        this.showReward();
       } else if (w.offer) {
         this.showLevelUp();
       }

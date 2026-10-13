@@ -14,6 +14,7 @@ import type { World } from '../sim/world/World';
 import { CameraRig } from './CameraRig';
 import { DamageNumbers } from './DamageNumbers';
 import { PlayerView } from './PlayerView';
+import { PropsView } from './PropsView';
 import type { QualitySettings } from './Quality';
 import { WeaponFx } from './WeaponFx';
 import { WorldView } from './WorldView';
@@ -30,6 +31,7 @@ export class Renderer3D {
   private readonly playerView = new PlayerView();
   private readonly worldView: WorldView;
   private readonly weaponFx = new WeaponFx();
+  private readonly props: PropsView;
   readonly damageNumbers = new DamageNumbers();
   private time = 0;
 
@@ -66,7 +68,14 @@ export class Renderer3D {
     this.scene.add(this.sun, this.sun.target);
 
     this.worldView = new WorldView(enemyCapacity, quality.shadows);
-    this.scene.add(this.worldView.root, this.playerView.root, this.weaponFx.root, this.damageNumbers.mesh);
+    this.props = new PropsView(quality.shadows);
+    this.scene.add(
+      this.worldView.root,
+      this.playerView.root,
+      this.weaponFx.root,
+      this.props.root,
+      this.damageNumbers.mesh,
+    );
 
     this.resize();
     window.addEventListener('resize', () => this.resize());
@@ -105,6 +114,7 @@ export class Renderer3D {
     this.playerView.update(p, dt, this.time);
     this.worldView.update(world, this.time, dt);
     this.weaponFx.update(world, this.time, dt);
+    this.props.update(world, this.time);
     this.damageNumbers.update(world, dt);
     this.renderer.render(this.scene, this.camera);
   }

@@ -85,7 +85,7 @@ export class Player {
         dx = ix;
         dz = iz;
       }
-      const boosted = Math.max(speed, moveSpeed * P.slideBoost);
+      const boosted = Math.max(speed, moveSpeed * P.slideBoost * stats.get('slidePower'));
       this.vx = dx * boosted;
       this.vz = dz * boosted;
       speed = boosted;

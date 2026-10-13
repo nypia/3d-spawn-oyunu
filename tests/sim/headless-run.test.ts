@@ -25,7 +25,10 @@ function runBot(world: World, seconds: number): { maxEnemies: number; worstStepM
     input.moveZ = Math.sin(t * 0.35);
     input.jump = s % 150 === 0;
     input.slide = s % 400 < 40;
-    while (world.offer) world.choose(botChoice(world));
+    while (world.offer || world.reward) {
+      if (world.reward) world.takeReward();
+      else world.choose(botChoice(world));
+    }
     const t0 = performance.now();
     world.step(input, dt);
     const ms = performance.now() - t0;
@@ -86,7 +89,10 @@ describe('performans', () => {
     const steps = 600;
     const t0 = performance.now();
     for (let s = 0; s < steps; s++) {
-      while (world.offer) world.choose(0);
+      while (world.offer || world.reward) {
+        if (world.reward) world.takeReward();
+        else world.choose(0);
+      }
       input.moveX = Math.cos(s * 0.01);
       input.moveZ = Math.sin(s * 0.01);
       world.step(input, BALANCE.simStep);
