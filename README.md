@@ -5,15 +5,21 @@ Three.js + TypeScript ile yazıldı; PC (klavye + fare) ve telefonda (dokunmatik
 
 Oyun tasarımı, mimari ve yol haritası: **[docs/GDD.md](docs/GDD.md)**
 
-## Şu an oyunda neler var (M2)
+## Şu an oyunda neler var (v0.3)
 
-- **8 silah:** Büyü Oku, Ateş Halesi, Kılıç Savuruşu, Yörünge Taşları, Bumerang Balta, Zincir Şimşek,
-  Havan, Saçma Tüfeği.
-- **8 kitap** (pasif stat) ve **nadirlik** (Sıradan / Nadir / Epik / Efsanevi). Seviye atlamada
+- **8 silah** ve her birinin **evrimi**. Silah maks seviyede ve eşleşen kitap sendeyken açtığın
+  sandık evrim verir (ör. Büyü Oku + Hiddet Kitabı → Kutsal Asa).
+- **8 kitap** (pasif stat) ve **nadirlik** (Sıradan / Nadir / Epik / Efsanevi). En fazla
+  **4 silah + 4 kitap**; yuvalar dolunca sahip olduklarının seviyeleri çıkar. Seviye atlamada
   Yenile, Yasakla ve Atla hakları var.
 - **6 düşman** (Balçık, İskelet, Yarasa, Patlayan, Okçu, Golem) ve 75 saniyede bir **elit**.
-- **Altın, vazolar, sandıklar ve 10 eşya.** Elitler ücretsiz ödül sandığı düşürür.
+  Güçlü düşmanlar daha değerli, farklı renkte XP taşı düşürür (mavi → yeşil → kırmızı → mor).
+- **Altın, vazolar ve sandıklar.** Sandıktan nadirliğe göre **14 benzersiz eşya** çıkar
+  (Anka Tüyü, Yankı Yüzüğü, Buz Kristali, Roket Çizme…). Elitler ücretsiz sandık düşürür.
+- **Meşaleler:** çevrende belirir, kırınca altın kesesi, tavuk, **mıknatıs** (XP ve altını
+  çeker), **Saat** (düşmanları dondurur) ya da **Tespih** (çevreyi temizler) düşer.
 - **Tapınaklar:** içinde 4 sn dur, 3 kalıcı bonustan birini seç.
+- **Rehber** (duraklat ekranında): tüm eşyalar ve evrimler.
 - Hasar sayıları, kayma ve zıplama ile Megabonk tarzı hareket.
 - PC (klavye + fare) ve **dokunmatik** kontroller.
 
@@ -62,6 +68,7 @@ Yerelde query string, Artifact linkinde hash kullanılır (ikisi birleştirilebi
 | `npm run typecheck` | TypeScript kontrolü |
 | `npm run lint` / `npm run format` | Biome ile lint ve format |
 | `npm test` | Birim testleri + tarayıcısız 10 dakikalık simülasyon + performans testi |
+| `npm run diag` | Denge raporu: bot dakika dakika seviye, düşman, taş ve altını yazar; 6 seed'de ölüm süreleri |
 | `npm run test:e2e` | Playwright ile masaüstü ve telefon (dokunmatik) testleri (önce `npm run build`) |
 | `npm run build:artifact` | claude.ai Artifact için tek dosyalık sayfa (`dist-artifact/spawn.html`) |
 

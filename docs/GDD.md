@@ -11,6 +11,7 @@
 | M1 — Oynanabilir prototip | ✅ Tamam |
 | M2 — Çekirdek sistemler | ✅ Tamam: 8 silah, 8 kitap, nadirlik, yenile/yasakla/atla, 6 düşman + elit, altın, vazo, sandık, 10 eşya, tapınak, hasar sayıları |
 | M5 (kısmen) — Dokunmatik kontroller | ✅ Öne alındı: joystick, kamera sürükleme, ZIPLA/KAY, otomatik kamera, kısa ekran düzeni |
+| v0.3 — Geri bildirim turu + VS ilhamı | ✅ Tamam: XP taşı hatası, taş kademeleri, 4+4 yuva görünür, mıknatıs altın çeker, 14 benzersiz eşya, meşaleler + Saat/Tespih, silah evrimi, rehber |
 | M3 — Görsel ve ses | ⏳ Sırada |
 | M4, M5'in kalanı, M6, M7 | Planlandı |
 
@@ -24,6 +25,14 @@ ulaşmadığı için hata ayıklama bayrakları hash ile verilir (`#debug`, `#lo
 - Taban can yenilenmesi 0.25/sn. Sandık 20 altından başlar, her açılışta ×1.4.
 - Düşmanlardan kaçan ve XP toplayan bir botla ölçüldü: 9. dakikada ~21. seviye, ekranda 150–600 düşman.
   Normal botlar seed'e ve silah seçimine göre 3–15. dakika arasında ölüyor.
+
+### v0.3'te değişen sayılar
+- XP eğrisi `6 · n^1.42`. Düşman XP'si zamanla `×(1 + 0.08·dk)` artar. Okçu 4, Golem 8, elit ×12 XP verir.
+- Yerde en fazla 800 XP taşı. Yeni taş 1 m içindeki taşla birleşir. Havuz doluysa oyuncuya en uzak
+  taş yeni taşa katılır, yani XP kaybolmaz.
+- Mıknatıs: vazodan %8, elitten %50, meşaleden (sv5+) düşer.
+- `npm run diag` botuyla: 9. dakikada ~25. seviye, yerde ≤800 taş. Normal bot 6 seed'in 5'inde
+  15 dakikayı tamamladı. Eski sürümde bu oran 3/6 idi; v0.3 daha kolay. M3'ten sonra yeniden ayarlanacak.
 
 ## Bağlam
 
@@ -45,17 +54,15 @@ kopyalanmayacak. Silah, karakter ve düşman isimleri bize özgü olacak.
 ```
 Koş → silahlar otomatik saldırır → düşmanlar ölür → XP taşı düşer → topla → seviye atla
 → 3 kart arasından seç (silah / kitap / güç) → daha güçlü ol → daha kalabalık sürüyle başa çık
-→ altınla sandık aç, tapınak doldur → boss portalı → sonraki bölüm
+→ altınla sandık aç (eşya ya da evrim), tapınak doldur, meşale kır → bölüm sonu (ileride)
 Run bitince: gümüş kazan → kalıcı açılımlar (meta) → yeni run
 ```
 
 ### 1.2 Run yapısı (bir bölüm)
 - **Bölüm süresi 10:00.** Ekranın üstünde geri sayım var.
 - 0–8 dk: dalgalar giderek yoğunlaşır, her 60–90 sn'de bir **elit** düşman çıkar (sandık düşürür).
-- Haritada **Boss Portalı** var. 3. dakikadan sonra oyuncu portala girip **şarj ederse** (alanda
-  5 sn durursa) bölüm boss'u gelir. Boss ölünce sonraki bölüme geçilir.
-- Süre biterse **"Son Dalga"** başlar: durmadan güçlenen, ölümcül bir sürü. Bu baskı oyuncuyu
-  portala gitmeye iter (Megabonk'taki gerilim).
+- **Bölüm sonu mekaniği: henüz karar verilmedi.** Megabonk'taki boss portalı ve "Son Dalga"
+  **olmayacak** (kullanıcı kararı). Yerine ileride birlikte başka bir mekanik seçilecek.
 - MVP: 2 bölüm (biyom). Sonra 3. bölüm ve zorluk kademeleri gelir.
 
 ### 1.3 Kontroller
@@ -78,24 +85,28 @@ Silahlar **otomatik nişan alır**. Bu yüzden mobilde kamerayı kontrol etmek z
 - Hareket hızı bir stat'tır. Hız build'leri oyunun tarzının bir parçası.
 
 ### 1.5 İlerleme sistemleri
-- **XP taşları:** renkleri değerine göre değişir. Yerde çok fazla taş birikirse yakındakiler
-  birleşir (performans için). Mıknatıs pickup'ı tüm taşları çeker.
-- **Seviye eğrisi:** `xpToNext(n) = round(8 * n^1.4)`. Değer `data/balance.ts` içinde, oynayarak ayarlanır.
+- **XP taşları:** renk ve boy değere göre değişir: mavi ≤2, yeşil ≤9, kırmızı ≤49, mor 50+ (elit).
+  Güçlü düşmanlar üst kademe taş düşürür. Yakın düşen taşlar birleşir. Sınır (800) dolunca en uzak
+  taş yeni taşa katılır, XP kaybolmaz. Mıknatıs tüm taşları ve altını çeker.
+- **Seviye eğrisi:** `xpToNext(n) = round(6 * n^1.42)`. Değer `data/balance.ts` içinde, oynayarak ayarlanır.
 - **Seviye atlama ekranı:** 3 kart (Şans stat'ı yüksekse 4). Her kart bir **nadirlik** taşır:
   Sıradan / Nadir / Epik / Efsanevi. Nadirlik bonusun büyüklüğünü çarpanla artırır (×1 / ×1.5 / ×2 / ×3).
   Kartlar üç tür olabilir: yeni silah, silah yükseltmesi, kitap (pasif stat).
   - **Yeniden çek (reroll)**, **yasakla (banish)**, **atla (skip)** hakları: run başına sınırlı,
     meta ile artırılır.
-- **Slotlar:** 4 silah + 4 kitap (MVP). Meta ile 5'e çıkabilir.
-- **Altın:** düşmanlardan ve kırılabilir vazolardan düşer. **Sandık** açmak altın ister ve her
-  açılışta fiyatı artar. Sandıktan nadirlik zarı atılmış bir **eşya** çıkar.
+- **Slotlar:** 4 silah + 4 kitap. HUD'da boş yuvalar kesik çizgiyle görünür. Seviye ekranında
+  "Silah 3/4 · Kitap 2/4" yazar. Yuvalar dolunca yalnızca sahip olunanların seviyeleri çıkar.
+  Meta ile 5'e çıkabilir.
+- **Altın:** düşmanlardan, vazolardan ve meşalelerden düşer. **Sandık** açmak altın ister ve her
+  açılışta fiyatı artar. Sandıktan nadirlik zarı atılmış bir **eşya** ya da **evrim** çıkar.
+- **Silah evrimi:** silah maks seviyede (8) ve eşleşen kitap en az Sv.1 iken açılan sandık evrim verir.
 - **Tapınak (Shrine):** haritaya dağılmış halkalar. İçinde 4 sn durunca 3 stat bonusundan biri seçilir.
   Her tapınak bir kez kullanılır.
 
 ### 1.6 MVP içerik listesi
 
 **Silahlar (8).** Her silah veriyle tanımlanır, davranışı yeniden kullanılabilir bir modüldür.
-Maksimum seviye 10. Her seviye atlama rastgele bir stat yükseltmesi getirir (nadirlikle ölçeklenir).
+Maksimum seviye 8. Her seviye kendi yükseltmesini getirir; kartın nadirliği onu büyütür.
 
 | Silah | Davranış | Not |
 |---|---|---|
@@ -112,12 +123,31 @@ Maksimum seviye 10. Her seviye atlama rastgele bir stat yükseltmesi getirir (na
 Çoğaltma (mermi sayısı), Genişlik (alan %), Mıknatıs (toplama mesafesi), Can (maks HP + yenilenme),
 Şans (nadirlik ve kart sayısı).
 
-**Eşyalar (sandıktan, 10):** Vampir Dişi (can çalma), Tüy (+1 zıplama), Altın Sikke (+altın),
-Dikenli Zırh (hasar yansıtma), Kalkan Muskası (her 12 sn'de 1 vuruşu engeller), Patlayan Kafatası
-(öldürülen düşman %10 ihtimalle patlar), Yonca (+şans), Kum Saati (+süre), Çizme (+kayma hızı),
-Lanetli Taç (+zorluk, +XP ve +altın).
+**Silah evrimleri (8).** Evrim aynı davranışı daha güçlü bir tabanla kullanır. Alınmış yükseltmeler
+korunur ve evrimin kendi efekt rengi olur.
 
-**Düşmanlar (6 + elit + boss):**
+| Silah | Kitap | Evrim |
+|---|---|---|
+| Büyü Oku | Hiddet | Kutsal Asa |
+| Ateş Halesi | Can | Cehennem Halesi |
+| Kılıç Savuruşu | Güç | Kan Kılıcı (360°) |
+| Yörünge Taşları | Genişlik | Gezegen Halkası |
+| Bumerang Balta | Çoğaltma | Kasırga Baltası |
+| Zincir Şimşek | Şans | Fırtına |
+| Havan | Mıknatıs | Meteor Yağmuru |
+| Saçma Tüfeği | Çeviklik | Ejderha Nefesi |
+
+**Eşyalar (sandıktan, 14).** Nadirliğe göre gruplanır ve her birinin kendine özgü bir etkisi var.
+Sandık önce nadirlik zarı atar (Şans etkiler), sonra o kademeden bir eşya seçer.
+
+| Nadirlik | Eşyalar |
+|---|---|
+| Sıradan | Tüy (+1 zıplama), Altın Sikke (altın +%30), Bandaj (seviye atlayınca 15 can), Mıknatıs Taşı (40 sn'de bir 15 m'deki XP ve altını çeker) |
+| Nadir | Vampir Dişi (öldürünce can), Dikenli Zırh (zırh + hasar yansıtma), Keskin Göz (kritik şansı ve hasarı), Roket Çizme (kayarken çarptığın düşman hasar alır, sen almazsın) |
+| Epik | Kalkan Muskası (12 sn'de bir vuruşu engeller), Patlayan Kafatası (öldürünce patlama), Buz Kristali (vuruşlar %8 dondurur), Anka Tüyü (bir kez diriliş + patlama) |
+| Efsanevi | Lanetli Taç (+%25 düşman, XP ve altın +%30), Yankı Yüzüğü (silahlar %20 ihtimalle iki kez ateşlenir) |
+
+**Düşmanlar (6 + elit):**
 | Düşman | Davranış |
 |---|---|
 | Balçık | Yavaş, basit kovalayıcı. İlk dakikaların kalabalığı |
@@ -126,8 +156,7 @@ Lanetli Taç (+zorluk, +XP ve +altın).
 | Golem | Yavaş ve tank. Geri itilmeye dirençli |
 | Okçu | Mesafe korur, ateş eder (mermi dodge edilebilir) |
 | Patlayan | Yaklaşınca şişer ve patlar (telegraph'lı) |
-| Elit (her tür) | Daha büyük, parlayan, ×8 HP. Sandık anahtarı/sandık düşürür |
-| Boss (bölüm başına 1) | 3 saldırı: hücum (charge), uyarı halkalı yere vurma, minyon çağırma |
+| Elit (her tür) | Daha büyük, parlayan, ×8 HP. Ücretsiz sandık, altın ve %50 mıknatıs düşürür |
 
 **Karakterler (3, meta ile daha fazlası):**
 | Karakter | Başlangıç silahı | Pasif |
@@ -142,7 +171,7 @@ Lanetli Taç (+zorluk, +XP ve +altın).
 - **Yerleşim:** oyuncu etrafında 28–38 m'lik halkada doğarlar. Hareket yönüne doğru ağırlıklıdır,
   mümkünse kamera görüş alanı dışındadır. Y koordinatı arazi yüksekliğine oturtulur (`h(x,z)`).
 - **Senaryolu olaylar** (`data/stages.ts`): belirli saniyelerde "kuşatma halkası", "yarasa sürüsü",
-  elit doğuşu, boss.
+  elit doğuşu.
 - **Aktif düşman sınırı:** masaüstünde 600, mobilde 250. Sınıra ulaşılınca yeni düşman doğmaz,
   onun yerine mevcutların HP çarpanı artar (zorluk düşmez).
 - **Geri dönüşüm:** oyuncudan 60 m'den uzak düşmanlar, oyuncunun önündeki halkaya ışınlanır.
@@ -152,11 +181,30 @@ Lanetli Taç (+zorluk, +XP ve +altın).
 - **Prosedürel yükseklik haritası (heightmap):** simplex noise + seed. Boyut 320×320 m ve sınırları
   sarp kayalık/çit. Tepe, çukur ve rampalar sayesinde kayma ve zıplama anlamlı olur.
 - Dekor (ağaç, kaya, mezar taşı) instanced olarak çizilir. Engeller fizikte basit daire çarpıştırıcıdır.
-- Tapınak, sandık, vazo ve boss portalı da seed'li olarak, birbirinden minimum mesafeyle yerleşir.
+- Tapınak, sandık ve vazo seed'li olarak, birbirinden minimum mesafeyle yerleşir. Meşaleler ise
+  oyuncunun çevresinde oyun sırasında belirir.
 - Biyom 1: Çayır/Orman. Biyom 2: Mezarlık/Çöl (farklı renk paleti, sis rengi ve düşman havuzu).
 
-### 1.9 Meta ilerleme
-- Run sonunda **gümüş** kazanılır (kill, süre, bölüm, boss). Gümüşle kalıcı yükseltmeler alınır:
+### 1.9 Vampire Survivors'tan ilham alınanlar (v0.3)
+- **Taş kademeleri:** XP değeri büyüdükçe taş rengi değişir (mavi → yeşil → kırmızı → mor). Taş sınırı
+  aşılınca fazlası tek taşta birikir.
+- **Silah evrimi:** maks silah + eşleşen kitap + sandık (yukarıdaki tablo).
+- **Meşaleler (ışık kaynakları):** 10 sn'de bir oyuncunun 15–30 m çevresinde belirir (yakında en
+  fazla 6). Yürüyerek ya da silahla kırılır. Düşenler seviye kapılıdır ve Şans nadirleri artırır:
+
+  | Ödül | Oran | Etki |
+  |---|---|---|
+  | Altın kesesi | %55 | 3–6 altın |
+  | Tavuk | %20 | 25 can |
+  | Mıknatıs | %12 (sv5+) | Tüm XP taşlarını ve altını çeker |
+  | Saat | %8 (sv4+) | 40 m'deki düşmanları 6 sn dondurur |
+  | Tespih | %5 (sv8+) | 30 m'deki elit olmayanları yok eder, elitlerin canının %35'i |
+
+- Nadir pickup'ların (mıknatıs, saat, tespih) üstünde uzaktan görünen bir ışık sütunu olur.
+- **Rehber:** duraklat ekranında eşyalar (nadirliğe göre) ve evrimler listelenir.
+
+### 1.10 Meta ilerleme
+- Run sonunda **gümüş** kazanılır (kill, süre, bölüm). Gümüşle kalıcı yükseltmeler alınır:
   +%HP, +reroll, +slot, başlangıç altını.
 - **Görevler/başarımlar** yeni içerik açar ("Balta ile 500 düşman öldür → Avcı açılır",
   "1. bölümü bitir → Havan havuza eklenir").
@@ -201,7 +249,7 @@ Lanetli Taç (+zorluk, +XP ve +altın).
   pozu kullanılır. Animasyon vertex shader'da prosedüreldir (zıplama, sallanma, squash-stretch).
   Instance başına faz ve renk attribute'u vardır, **vuruş flaşı** da buradan yapılır. Low-poly
   "oyuncak" hissine uyar. Sonraki aşamada VAT (vertex animation texture) ile gerçek yürüme döngüleri gelir.
-- **Oyuncu, elitler ve boss:** gerçek `SkinnedMesh` + `AnimationMixer` (idle/koş/zıpla/kay/öl).
+- **Oyuncu ve elitler:** gerçek `SkinnedMesh` + `AnimationMixer` (idle/koş/zıpla/kay/öl).
 - **Kamera rig'i:** orbit (yaw/pitch) ve yaylı kol. Araziye girmemesi için yükseklik kontrolü,
   yumuşak takip ve hafif ekran sarsıntısı (ayarlardan kapatılabilir).
 - **Işık:** 1 directional (gölge sadece oyuncu çevresindeki dar frustum'da) + hemisphere + mesafe sisi.
@@ -236,7 +284,8 @@ Lanetli Taç (+zorluk, +XP ve +altın).
   kartlar havuzdan çıkar.
 
 ### 2.7 Arayüz (DOM)
-- HUD: HP barı, XP barı + seviye, sayaç, kill ve altın, silah/kitap ikonları ve seviyeleri, boss HP barı.
+- HUD: HP barı, XP barı + seviye, sayaç, kill ve altın, 4 silah + 4 kitap yuvası (seviye, evrimde ★,
+  evrime hazırsa parlama), eşya ikonları, kısa duyurular.
 - Ekranlar: Ana menü → Karakter seçimi → Oyun → Seviye atlama kartları → Duraklat/Ayarlar →
   Oyun sonu/Zafer (istatistik: silah başına hasar) → Meta mağaza/Görevler.
 - Mobil: joystick, zıplama/kayma butonları, ≥ 44 px dokunma hedefleri, `safe-area-inset`,
@@ -251,7 +300,7 @@ Lanetli Taç (+zorluk, +XP ve +altın).
 ### 2.9 Asset'ler (CC0)
 - **Kenney:** Nature Kit, Graveyard Kit, Particle Pack, UI Pack, Game Icons, Impact/Interface/RPG
   Audio, Kenney Fonts.
-- **Quaternius:** Ultimate Animated Character Pack (oyuncu), Ultimate Monsters (düşman/boss),
+- **Quaternius:** Ultimate Animated Character Pack (oyuncu), Ultimate Monsters (düşmanlar),
   Stylized Nature MegaKit.
 - `kenney.nl` ve `quaternius.com` bu ortamdan erişilebilir durumda (kontrol edildi). Her paketin
   lisansı indirirken tekrar doğrulanacak ve `CREDITS.md`'ye yazılacak.
@@ -272,12 +321,12 @@ src/
                player/Player.ts · enemies/{EnemyPool,SpawnDirector}.ts                             ✔
                combat/ProjectilePool.ts · weapons/Weapons.ts · pickups/GemPool.ts                  ✔
                progression/Upgrades.ts                                                            ✔
-               interactables/{Chest,Shrine,BossPortal,Vase}.ts · stage/StageRunner.ts              (M2, M4)
+               interactables/{Chest,Shrine,Vase,Torches}.ts · stage/StageRunner.ts              (M2, M4)
   data/        balance.ts, enemies.ts, weapons.ts, tomes.ts                                       ✔
                items.ts, characters.ts, stages.ts                                                 (M2, M4, M6)
   render/      Renderer3D.ts, CameraRig.ts, TerrainView.ts, WorldView.ts, PlayerView.ts,
                Quality.ts, shapes.ts (yer tutucu modeller)                                         ✔
-               Assets.ts, BossView.ts, vfx/{Particles,DamageNumbers,Telegraphs}.ts                 (M2, M3, M4)
+               Assets.ts, vfx/{Particles,DamageNumbers,Telegraphs}.ts                 (M2, M3, M4)
   audio/       AudioManager.ts                                                                    (M3)
   ui/          Hud.ts, Screens.ts, dom.ts, styles.css                                             ✔
                touch/VirtualJoystick.ts, i18n/{tr,en}.ts                                          (M5, M6)
@@ -321,10 +370,14 @@ Kenney/Quaternius asset'leri, oyuncu animasyonları, instanced düşmanlar + sha
 flaşı, VFX, telegraph halkaları, ışık/sis/biyom paleti, SFX + müzik, yükleme ekranı, `CREDITS.md`.
 ✔ Kabul: Masaüstünde 600 düşmanda 60 FPS, oyun "gerçek oyun" gibi görünüyor.
 
+**v0.3 — Geri bildirim turu (tamamlandı)**
+XP taşı hatası, güçlü düşman XP'si ve taş kademeleri, 4+4 yuva görünür, mıknatıs altını da çeker,
+14 benzersiz eşya, meşaleler + Saat/Tespih/kese, silah evrimi, rehber.
+
 **M4 — Bölüm yapısı**
-10 dk sayaç, boss portalı + şarj, boss (3 saldırı paterni), Son Dalga, zafer ekranı, 2. biyom
-(Mezarlık), bölümler arası geçiş, oyun sonu istatistikleri.
-✔ Kabul: 2 bölüm baştan sona oynanıp kazanılabiliyor.
+Bölüm sonu mekaniği ileride birlikte seçilecek (boss portalı **yok**). Ayrıca zafer ekranı,
+2. biyom (Mezarlık), bölümler arası geçiş ve oyun sonu istatistikleri.
+✔ Kabul: 2 bölüm baştan sona oynanabiliyor.
 
 **M5 — Mobil**
 Dokunmatik joystick ve butonlar, kamera otomatik takip, responsive HUD/menüler, kalite seviyeleri,
@@ -338,7 +391,7 @@ kayıt sistemi (sürümlü), ayarlar (ses, hassasiyet, kalite, dil, ekran sarsı
 
 **M7 — Cila ve yayın**
 Denge turu (headless sim ile istatistik), ilk oyun ipuçları, erişilebilirlik, render interpolasyonu,
-hata/çökme koruması, itch.io build'i. Sonraki fikirler: silah evrimleri, VAT animasyonları,
+hata/çökme koruması, itch.io build'i. Sonraki fikirler: VAT animasyonları,
 yeni biyomlar, zorluk kademeleri, gamepad desteği.
 
 ---
