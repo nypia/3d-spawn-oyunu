@@ -1,7 +1,7 @@
 {
   "name": "3d-spawn-oyunu",
   "private": true,
-  "version": "0.3.0",
+  "version": "0.4.0",
   "type": "module",
   "description": "3D survivors-like (Vampire Survivors / Megabonk tarzı) tarayıcı oyunu — Three.js + TypeScript",
   "scripts": {
@@ -19,6 +19,8 @@
     "fetch-assets": "node scripts/fetch-assets.mjs"
   },
   "dependencies": {
+    "@fontsource-variable/baloo-2": "5.3.0",
+    "@fontsource-variable/nunito": "5.3.0",
     "simplex-noise": "4.0.3",
     "three": "0.186.1"
   },

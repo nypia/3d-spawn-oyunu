@@ -2,6 +2,9 @@ import { type PerspectiveCamera, Vector3 } from 'three';
 import type { Player } from '../sim/player/Player';
 import type { Heightmap } from '../sim/terrain/Heightmap';
 
+const MENU_DISTANCE = 5.2;
+const MENU_PITCH = 0.16;
+
 /**
  * 3. şahıs kamera: oyuncunun etrafında yaw/pitch ile döner, yumuşak takip eder,
  * araziye gömülmez. Yaw doğrudan uygulanır (kontrol gecikmesi olmasın), konum yumuşatılır.
@@ -11,6 +14,9 @@ export class CameraRig {
   pitch = 0.42;
   distance = 10;
   sensitivity = 0.0025;
+  /** 0 = menü (kahramana yakın vitrin çekimi), 1 = oyun kamerası; arada yumuşak geçiş. */
+  blend = 0;
+  private menuTime = 0;
   private readonly target = new Vector3();
   private initialized = false;
   private shake = 0;
@@ -35,9 +41,19 @@ export class CameraRig {
     return [Math.cos(this.yaw), -Math.sin(this.yaw)];
   }
 
-  update(player: Player, terrain: Heightmap, dt: number): void {
+  update(player: Player, terrain: Heightmap, dt: number, menu = false): void {
+    const k = 1 - Math.exp(-3.5 * dt);
+    this.blend += ((menu ? 0 : 1) - this.blend) * k;
+    const b = this.blend;
+    // Menüden oyuna geçerken kamera önden kahramanın arkasına süzülür.
+    if (!menu && b < 0.97) {
+      const behind = player.facing + Math.PI;
+      this.yaw += Math.atan2(Math.sin(behind - this.yaw), Math.cos(behind - this.yaw)) * k;
+    }
+    const distance = MENU_DISTANCE + (this.distance - MENU_DISTANCE) * b;
+    const pitch = MENU_PITCH + (this.pitch - MENU_PITCH) * b;
     const tx = player.x;
-    const ty = player.y + 1.6;
+    const ty = player.y + 1.15 + 0.45 * b;
     const tz = player.z;
     if (!this.initialized) {
       this.target.set(tx, ty, tz);
@@ -50,10 +66,10 @@ export class CameraRig {
       this.target.y += (ty - this.target.y) * kY;
     }
 
-    const cp = Math.cos(this.pitch);
-    let cx = this.target.x + Math.sin(this.yaw) * cp * this.distance;
-    let cy = this.target.y + Math.sin(this.pitch) * this.distance;
-    let cz = this.target.z + Math.cos(this.yaw) * cp * this.distance;
+    const cp = Math.cos(pitch);
+    let cx = this.target.x + Math.sin(this.yaw) * cp * distance;
+    let cy = this.target.y + Math.sin(pitch) * distance;
+    let cz = this.target.z + Math.cos(this.yaw) * cp * distance;
     const ground = terrain.heightAt(cx, cz) + 0.7;
     if (cy < ground) cy = ground;
 
@@ -68,9 +84,10 @@ export class CameraRig {
     this.camera.lookAt(this.target);
   }
 
-  /** Menüde yavaşça dönen sinematik kamera. */
+  /** Menüde kahramanı önden, 3/4 açıyla gösteren ve yavaşça salınan yakın çekim. */
   orbit(player: Player, terrain: Heightmap, dt: number): void {
-    this.yaw += dt * 0.12;
-    this.update(player, terrain, dt);
+    this.menuTime += dt;
+    this.yaw = player.facing + 0.5 + Math.sin(this.menuTime * 0.25) * 0.4;
+    this.update(player, terrain, dt, true);
   }
 }

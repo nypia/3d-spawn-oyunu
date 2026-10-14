@@ -72,6 +72,7 @@ export class Screens {
   }
 
   private show(...children: Node[]): void {
+    this.el.className = 'overlay';
     this.el.replaceChildren(...children);
     this.el.style.display = '';
   }
@@ -103,13 +104,15 @@ export class Screens {
       'div.panel.start',
       {},
       h('h1.title', {}, 'SPAWN'),
-      h('p.subtitle', {}, '3D survivors-like · prototip v0.3'),
+      h('p.subtitle', {}, '3D survivors-like · v0.4'),
       h('p.lead', {}, 'Silahların otomatik saldırır. Hayatta kal, XP topla, güçlen.'),
       picker,
       controls,
       play,
     );
     this.show(panel);
+    // Panel solda (dikey ekranda altta): sahnedeki kahraman görünsün.
+    this.el.classList.add('start-overlay');
   }
 
   showLevelUp(

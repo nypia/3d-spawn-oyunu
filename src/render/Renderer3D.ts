@@ -217,12 +217,29 @@ export class Renderer3D {
     }
   }
 
+  /**
+   * Menüde kahraman paneli örtmesin: geniş ekranda görüntü sağa, dikey ekranda yukarı kaydırılır
+   * (kamera görüş penceresi kaydırma). Oyuna geçerken kamera geçişiyle birlikte sıfırlanır.
+   */
+  private menuFraming(): void {
+    const menu = 1 - this.rig.blend;
+    if (menu < 0.002) {
+      if (this.camera.view?.enabled) this.camera.clearViewOffset();
+      return;
+    }
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    const portrait = w < h;
+    this.camera.setViewOffset(w, h, portrait ? 0 : -w * 0.17 * menu, portrait ? h * 0.2 * menu : 0, w, h);
+  }
+
   render(world: World, dt: number, cinematic: boolean): void {
     this.time += dt;
     if (!cinematic) this.adapt(dt);
     const p = world.player;
     if (cinematic) this.rig.orbit(p, world.terrain, dt);
     else this.rig.update(p, world.terrain, dt);
+    this.menuFraming();
 
     // Güneş (ve gölge kamerası) oyuncuyu takip eder.
     this.sun.position.set(p.x + SUN_DIR.x * 55, p.y + SUN_DIR.y * 55, p.z + SUN_DIR.z * 55);

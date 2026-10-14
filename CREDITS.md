@@ -12,3 +12,12 @@ yayınlanmıştır. Atıf zorunlu değildir, ama emeğine teşekkür ederiz.
 
 Modeller `npm run fetch-assets` ile indirilip küçültülür (dış doku bağlantıları ve kullanılmayan animasyonlar
 silinir). Balçık, Yarasa, Patlayan ve Golem gibi diğer modeller koddan üretilir (`src/render`).
+
+## Yazı tipleri
+
+| Yazı tipi | Kullanım | Lisans | Kaynak |
+|---|---|---|---|
+| Baloo 2 (Ek Type) | Başlıklar, HUD | SIL Open Font License 1.1 | https://github.com/EkType/Baloo2 |
+| Nunito (Vernon Adams) | Metin | SIL Open Font License 1.1 | https://github.com/googlefonts/nunito |
+
+Yazı tipleri [Fontsource](https://fontsource.org) paketlerinden alınır ve derlemeye gömülür.

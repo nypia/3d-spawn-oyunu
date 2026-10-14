@@ -5,7 +5,14 @@ Three.js + TypeScript ile yazıldı; PC (klavye + fare) ve telefonda (dokunmatik
 
 Oyun tasarımı, mimari ve yol haritası: **[docs/GDD.md](docs/GDD.md)**
 
-## Şu an oyunda neler var (v0.3)
+## Şu an oyunda neler var (v0.4)
+
+- **Görsel cila (v0.4):** animasyonlu Kenney maceracısı (4 karakter arasından seçilir), iskelet ve ork
+  okçu gibi gerçek modeller, koddan çizilip canlandırılmış Balçık, Yarasa, Patlayan ve Golem.
+  Yüzlerce düşman GPU'da tek draw call ile yürür ve ölüm animasyonu oynar. Ağaçlı, çiçekli,
+  rüzgârda salınan çimenli bir dünya, gökyüzü ve bulutlar. Bloom parıltısı, vuruş kıvılcımı, seken
+  parçalar, patlama, taş toplama ışıltısı, seviye atlama sarmalı, koşu tozu ve meşale korları.
+  Yuvarlak hatlı yazı tipleri ve yenilenmiş arayüz.
 
 - **8 silah** ve her birinin **evrimi**. Silah maks seviyede ve eşleşen kitap sendeyken açtığın
   sandık evrim verir (ör. Büyü Oku + Hiddet Kitabı → Kutsal Asa).
@@ -78,11 +85,13 @@ Yerelde query string, Artifact linkinde hash kullanılır (ikisi birleştirilebi
   çalıştırılıp test edilebilir. Düşman, mermi ve XP taşları bellek ayırmayan Struct-of-Arrays
   havuzlarında tutulur. Çarpışma ve "en yakın düşman" sorguları uzaysal ızgara ile yapılır.
 - `src/data/`: tüm içerik ve denge sayıları (silahlar, kitaplar, düşmanlar, spawn eğrisi).
-- `src/render/`: Three.js katmanı. Sim durumunu her karede okur, düşman türü başına tek
-  draw call (InstancedMesh) kullanır.
+- `src/render/`: Three.js katmanı. Sim durumunu her karede okur. Düşmanlar `crowd/CrowdMesh` ile
+  çizilir: animasyonlar kemik matrisi dokusuna önceden pişirilir, her düşman türü tek draw call ile
+  kendi animasyon karesini oynar. Efektler `fx/` altında havuzlu parçacıklardır. Yüksek kalitede
+  bloom art işlemi açıktır; yavaş cihazda bloom ve çözünürlük kendiliğinden düşer.
 - `src/ui/`: DOM tabanlı HUD ve menüler.
 
 ## Lisans / asset'ler
 
-Şu an tüm modeller koddan üretilen yer tutucu şekillerdir. M3'te eklenecek CC0 asset'ler
-(Kenney, Quaternius) `CREDITS.md` dosyasında listelenecek.
+3D modeller [Kenney](https://kenney.nl) (CC0), yazı tipleri Baloo 2 ve Nunito (SIL OFL 1.1).
+Ayrıntılar `CREDITS.md` dosyasında. Modelleri yeniden indirmek için: `npm run fetch-assets`.

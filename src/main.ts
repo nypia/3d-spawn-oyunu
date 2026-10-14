@@ -1,5 +1,6 @@
 import { Game } from './core/Game';
 import { loadAssets } from './render/assets/loadAssets';
+import { loadFonts } from './ui/fonts';
 import './ui/styles.css';
 
 const root = document.getElementById('app');
@@ -42,7 +43,7 @@ function loadingScreen(app: HTMLElement): {
 async function boot(app: HTMLElement): Promise<void> {
   const loading = loadingScreen(app);
   try {
-    const assets = await loadAssets(loading.set);
+    const [assets] = await Promise.all([loadAssets(loading.set), loadFonts()]);
     loading.message('Hazırlanıyor…');
     const game = new Game(app, assets);
     // Shader derlemesi açılış ekranının arkasında; en fazla birkaç saniye beklenir.

@@ -12,7 +12,8 @@
 | M2 — Çekirdek sistemler | ✅ Tamam: 8 silah, 8 kitap, nadirlik, yenile/yasakla/atla, 6 düşman + elit, altın, vazo, sandık, 10 eşya, tapınak, hasar sayıları |
 | M5 (kısmen) — Dokunmatik kontroller | ✅ Öne alındı: joystick, kamera sürükleme, ZIPLA/KAY, otomatik kamera, kısa ekran düzeni |
 | v0.3 — Geri bildirim turu + VS ilhamı | ✅ Tamam: XP taşı hatası, taş kademeleri, 4+4 yuva görünür, mıknatıs altın çeker, 14 benzersiz eşya, meşaleler + Saat/Tespih, silah evrimi, rehber |
-| M3 — Görsel ve ses | ⏳ Sırada |
+| M3 — Görsel (v0.4) | ✅ Tamam: Kenney modelleri, animasyonlu kalabalık (CrowdMesh), el yapımı rig'ler, kahraman seçimi, dünya (ağaç, çimen, gök), bloom, parçacıklar, arayüz cilası |
+| M3 — Ses | ⏳ Sırada |
 | M4, M5'in kalanı, M6, M7 | Planlandı |
 
 **Oynanabilir sürüm:** claude.ai Artifact olarak yayınlanıyor (`npm run build:artifact`). three.js
@@ -245,17 +246,30 @@ Sandık önce nadirlik zarı atar (Şans etkiler), sonra o kademeden bir eşya s
 ### 2.4 Render katmanı
 - **InstancedMesh:** her düşman türü, mermi türü, XP taşı ve dekor türü için 1 draw call. Hedef
   toplam draw call < 100.
-- **Düşman animasyonu:** SkinnedMesh instancing'i zor olduğu için MVP'de düşman modelinin statik
-  pozu kullanılır. Animasyon vertex shader'da prosedüreldir (zıplama, sallanma, squash-stretch).
-  Instance başına faz ve renk attribute'u vardır, **vuruş flaşı** da buradan yapılır. Low-poly
-  "oyuncak" hissine uyar. Sonraki aşamada VAT (vertex animation texture) ile gerçek yürüme döngüleri gelir.
-- **Oyuncu ve elitler:** gerçek `SkinnedMesh` + `AnimationMixer` (idle/koş/zıpla/kay/öl).
+- **Düşman animasyonu (v0.4, `crowd/`):** her vertex tek bir kemiğe bağlı olduğu için kemik
+  matrisleri klip klip, kare kare bir float dokusuna pişirilir (`bakeRig`). `CrowdMesh` instance başına
+  (kare A, kare B, ara oran, flaş) taşır; vertex shader iki kareyi harmanlar. Yürüme hızı sim'deki
+  yürünen yola bağlıdır (donan düşman pozunu korur). Ölenler kısa süre `die` klibini oynayan
+  "ceset" olur. İskelet ve okçu Kenney modelleri, Balçık/Yarasa/Patlayan/Golem koddan çizilen
+  prosedürel rig'lerdir. Vuruş flaşı beyaz, donma buz mavisi, elit altın tonludur.
+- **Oyuncu:** Kenney maceracısı, `AnimationMixer` (idle/yürü/koş/zıpla/düş/kay/öl, geçişli).
+  Başlangıç ekranında 4 karakterden biri seçilir (kozmetik).
 - **Kamera rig'i:** orbit (yaw/pitch) ve yaylı kol. Araziye girmemesi için yükseklik kontrolü,
   yumuşak takip ve hafif ekran sarsıntısı (ayarlardan kapatılabilir).
 - **Işık:** 1 directional (gölge sadece oyuncu çevresindeki dar frustum'da) + hemisphere + mesafe sisi.
   Düşük kalitede gölge yerine oyuncu altında "blob" gölge decal'i kullanılır.
 - **Hasar sayıları:** rakam atlası texture'ı + instanced quad'lar (DOM yerine, yüzlercesi aynı anda).
-- **VFX:** havuzlanmış instanced parçacıklar (vuruş kıvılcımı, ölüm "puf"u, seviye atlama ışığı, telegraph halkaları).
+- **VFX (v0.4, `fx/`):** kameraya dönük kart parçacıkları (toplamalı kıvılcım/ışıltı, normal karışımlı
+  toz/duman) ve seken katı parçalar (kırıntı, altın para). Kaynaklar sim olay akışlarıdır: vuruş,
+  ölüm, patlama, kırılma, toplama (`collectFx`). Ayrıca seviye atlama sarmalı, koşu/kayma/iniş tozu,
+  meşale korları ve büyü oku izi.
+- **Parıltı:** yüksek kalitede HDR bloom (RenderPass → UnrealBloomPass, eşik 1 → OutputPass, MSAA).
+  Işıyan şeyler (taş, büyü, alev, rün) 1'in üstünde renk verir. Düşük kalitede bloom yerine
+  toplamalı "parıltı kartları" kullanılır. Kalite elle seçilmediyse 3 sn boyunca 45 FPS altında
+  kalınca önce bloom, sonra piksel oranı düşer.
+- **Dünya:** gradyan gök kubbesi + güneş, low-poly bulutlar, ufukla aynı renkte sis, Kenney doğa
+  modelleri (ağaç, kaya, çiçek, mantar, çalı) ve rüzgârda salınan çimen tutamları. Statik
+  serpinti oyuncuya uzaklığa göre kırpılır (`CulledInstances`).
 
 ### 2.5 Kalite ve performans bütçesi
 | | Masaüstü | Mobil (orta segment) |
@@ -324,9 +338,10 @@ src/
                interactables/{Chest,Shrine,Vase,Torches}.ts · stage/StageRunner.ts              (M2, M4)
   data/        balance.ts, enemies.ts, weapons.ts, tomes.ts                                       ✔
                items.ts, characters.ts, stages.ts                                                 (M2, M4, M6)
-  render/      Renderer3D.ts, CameraRig.ts, TerrainView.ts, WorldView.ts, PlayerView.ts,
-               Quality.ts, shapes.ts (yer tutucu modeller)                                         ✔
-               Assets.ts, vfx/{Particles,DamageNumbers,Telegraphs}.ts                 (M2, M3, M4)
+  render/      Renderer3D.ts, CameraRig.ts, TerrainView.ts, WorldView.ts, HeroView.ts,
+               PropsView.ts, Scatter.ts, Sky.ts, Quality.ts, shapes.ts                              ✔
+               assets/{loadAssets,staticModels}.ts · crowd/{bakeRig,CrowdMesh,proceduralRigs}.ts   ✔
+               fx/{Effects,Particles,Debris,Sprites}.ts · DamageNumbers.ts                         ✔
   audio/       AudioManager.ts                                                                    (M3)
   ui/          Hud.ts, Screens.ts, dom.ts, styles.css                                             ✔
                touch/VirtualJoystick.ts, i18n/{tr,en}.ts                                          (M5, M6)
@@ -369,6 +384,7 @@ hasar sayıları, mıknatıs, XP taşı birleştirme, headless sim testi.
 Kenney/Quaternius asset'leri, oyuncu animasyonları, instanced düşmanlar + shader animasyonu + vuruş
 flaşı, VFX, telegraph halkaları, ışık/sis/biyom paleti, SFX + müzik, yükleme ekranı, `CREDITS.md`.
 ✔ Kabul: Masaüstünde 600 düşmanda 60 FPS, oyun "gerçek oyun" gibi görünüyor.
+Görsel kısım v0.4'te tamamlandı (yukarıdaki 2.4). Ses (SFX + müzik) sırada.
 
 **v0.3 — Geri bildirim turu (tamamlandı)**
 XP taşı hatası, güçlü düşman XP'si ve taş kademeleri, 4+4 yuva görünür, mıknatıs altını da çeker,
