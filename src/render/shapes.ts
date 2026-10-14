@@ -305,3 +305,70 @@ export function beamGeometry(height = 7, radius = 0.22): BufferGeometry {
   g.deleteAttribute('normal');
   return g;
 }
+
+/** Meşale (mangal): ayak + kase. Alev ayrı mesh (titreşim için). */
+export function brazierGeometry(): BufferGeometry {
+  const foot = new CylinderGeometry(0.28, 0.34, 0.12, 8).translate(0, 0.06, 0);
+  const pole = new CylinderGeometry(0.07, 0.09, 0.95, 6).translate(0, 0.55, 0);
+  const bowl = new CylinderGeometry(0.4, 0.2, 0.28, 8).translate(0, 1.12, 0);
+  const rim = new TorusGeometry(0.38, 0.05, 4, 10).rotateX(Math.PI / 2).translate(0, 1.26, 0);
+  const coals = new CylinderGeometry(0.33, 0.33, 0.05, 8).translate(0, 1.22, 0);
+  return build([
+    [foot, 0x3d3530],
+    [pole, 0x4a4038],
+    [bowl, 0x4a4038],
+    [rim, 0xc9a24a],
+    [coals, 0xff5a1f],
+  ]);
+}
+
+/** Alev: dış turuncu koni + iç sarı çekirdek. Taban y=0. */
+export function flameGeometry(): BufferGeometry {
+  const outer = new ConeGeometry(0.26, 0.7, 7).translate(0, 0.35, 0);
+  const inner = new ConeGeometry(0.14, 0.45, 6).translate(0, 0.24, 0);
+  return build([
+    [outer, 0xff3a00],
+    [inner, 0xffb000],
+  ]);
+}
+
+export function bagGeometry(): BufferGeometry {
+  const sack = new SphereGeometry(0.24, 7, 5).scale(1, 0.9, 1);
+  const neck = new CylinderGeometry(0.07, 0.12, 0.12, 6).translate(0, 0.24, 0);
+  const tie = new TorusGeometry(0.08, 0.025, 4, 8).rotateX(Math.PI / 2).translate(0, 0.22, 0);
+  const coin = new CylinderGeometry(0.1, 0.1, 0.03, 8).rotateX(Math.PI / 2).translate(0, 0, 0.23);
+  return build([
+    [sack, 0x9a6a35],
+    [neck, 0x8a5a2b],
+    [tie, 0xffcf33],
+    [coin, 0xffcf33],
+  ]);
+}
+
+/** Saat: dik duran altın çerçeveli kadran. */
+export function clockGeometry(): BufferGeometry {
+  const rim = new CylinderGeometry(0.32, 0.32, 0.1, 14).rotateX(Math.PI / 2);
+  const face = new CylinderGeometry(0.26, 0.26, 0.11, 14).rotateX(Math.PI / 2);
+  const hour = new BoxGeometry(0.04, 0.14, 0.02).translate(0, 0.07, 0.065);
+  const minute = new BoxGeometry(0.17, 0.035, 0.02).translate(0.085, 0, 0.065);
+  const knob = new SphereGeometry(0.06, 5, 4).translate(0, 0.37, 0);
+  return build([
+    [rim, 0xffc93c],
+    [face, 0xfff8e6],
+    [hour, 0x222222],
+    [minute, 0x222222],
+    [knob, 0xffc93c],
+  ]);
+}
+
+/** Tespih: kutsal haç + boncuk halkası. */
+export function rosaryGeometry(): BufferGeometry {
+  const v = new BoxGeometry(0.1, 0.56, 0.08).translate(0, -0.05, 0);
+  const h = new BoxGeometry(0.36, 0.1, 0.08).translate(0, 0.08, 0);
+  const beads = new TorusGeometry(0.22, 0.03, 4, 14).translate(0, 0.36, 0);
+  return build([
+    [v, 0xfff3c4],
+    [h, 0xfff3c4],
+    [beads, 0xc9a24a],
+  ]);
+}

@@ -19,6 +19,7 @@ import { ENEMIES, EXPLODER } from '../data/enemies';
 import { GEM_TIERS, gemTier } from '../data/gems';
 import { CHEST, SHRINE } from '../sim/world/Interactables';
 import { OBSTACLE_ROCK, OBSTACLE_TREE } from '../sim/world/Obstacles';
+import { TORCH_FX } from '../sim/world/Torches';
 import type { World } from '../sim/world/World';
 import {
   archerGeometry,
@@ -368,8 +369,9 @@ export class WorldView {
         y: d[o + 1] + 0.5,
         z: d[o + 2],
         t: 0,
-        color: kind === CHEST ? 0xffd54a : kind === SHRINE ? 0x7fe3ff : 0xc8743f,
-        size: kind === CHEST ? 1.6 : kind === SHRINE ? 2.6 : 0.9,
+        color:
+          kind === CHEST ? 0xffd54a : kind === SHRINE ? 0x7fe3ff : kind === TORCH_FX ? 0xff8a2a : 0xc8743f,
+        size: kind === CHEST ? 1.6 : kind === SHRINE ? 2.6 : kind === TORCH_FX ? 1.3 : 0.9,
       });
     });
     let k = 0;

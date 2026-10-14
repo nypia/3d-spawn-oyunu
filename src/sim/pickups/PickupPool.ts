@@ -1,9 +1,15 @@
 export const PICKUP_GOLD = 0;
 export const PICKUP_HEAL = 1;
 export const PICKUP_MAGNET = 2;
+/** Meşaleden düşen altın kesesi (value = altın miktarı). */
+export const PICKUP_BAG = 3;
+/** Saat: yakındaki düşmanları dondurur. */
+export const PICKUP_CLOCK = 4;
+/** Tespih: yakındaki elit olmayan düşmanları yok eder. */
+export const PICKUP_ROSARY = 5;
 
 /**
- * XP dışındaki toplanabilirler: altın, can (tavuk budu), mıknatıs.
+ * XP dışındaki toplanabilirler: altın, kese, can (tavuk budu), mıknatıs, saat, tespih.
  * XP taşları gibi toplama mesafesine girince oyuncuya çekilir.
  */
 export class PickupPool {

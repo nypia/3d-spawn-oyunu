@@ -19,6 +19,9 @@ export class Hud {
   private readonly hpText = h('span.hp-text');
   private readonly loadout = h('div.hud-loadout');
   private readonly hint = h('div.hud-hint');
+  /** Tespih alınınca tüm ekranı kaplayan beyaz flaş. */
+  private readonly flash = h('div.screen-flash');
+  private lastFlash = -1;
   /** Kısa süreli duyuru (Anka Tüyü dirilişi vb.). */
   private readonly toast = h('div.hud-toast', { 'data-testid': 'toast' });
   private lastLoadoutKey = '';
@@ -28,6 +31,7 @@ export class Hud {
     this.el = h(
       'div.hud',
       {},
+      this.flash,
       h('div.xp-bar', {}, this.xpFill, this.level),
       this.timer,
       h('div.hud-kills', {}, h('span', {}, '💀 '), this.kills, h('span.hud-gold', {}, '🪙 ', this.gold)),
@@ -55,6 +59,14 @@ export class Hud {
     this.setText('kills', this.kills, String(world.kills));
     this.setText('gold', this.gold, String(Math.floor(world.gold)));
     this.setText('hp', this.hpText, `${Math.ceil(p.hp)} / ${Math.round(p.maxHp)}`);
+
+    // Tespih: beyaz flaş (CSS animasyonu yeniden başlatılır).
+    if (world.holyAt >= 0 && world.holyAt !== this.lastFlash) {
+      this.lastFlash = world.holyAt;
+      this.flash.classList.remove('on');
+      void this.flash.offsetWidth;
+      this.flash.classList.add('on');
+    }
 
     const toast =
       world.revivedAt >= 0 && world.time - world.revivedAt < 2.5 ? '🦅 Anka Tüyü: küllerinden doğdun!' : '';

@@ -4,13 +4,22 @@ import { ARCHER, ELITE, ENEMIES, EXPLODER } from '../../data/enemies';
 import { ITEM_FX, ITEM_INDEX, ITEMS } from '../../data/items';
 import { SHRINE, SHRINE_BONUSES } from '../../data/shrines';
 import { TOMES, tomeValue } from '../../data/tomes';
+import { TORCH, TORCH_DROPS, type TorchDrop, torchDropWeights } from '../../data/torches';
 import { WEAPON_INDEX, WEAPONS } from '../../data/weapons';
 import { Blasts } from '../combat/Blasts';
 import { PF_GROUND_FOLLOW, PF_RETURNING, PF_RETURNS, ProjectilePool } from '../combat/ProjectilePool';
 import { EnemyPool } from '../enemies/EnemyPool';
 import { SpawnDirector } from '../enemies/SpawnDirector';
 import { GemPool } from '../pickups/GemPool';
-import { PICKUP_GOLD, PICKUP_HEAL, PICKUP_MAGNET, PickupPool } from '../pickups/PickupPool';
+import {
+  PICKUP_BAG,
+  PICKUP_CLOCK,
+  PICKUP_GOLD,
+  PICKUP_HEAL,
+  PICKUP_MAGNET,
+  PICKUP_ROSARY,
+  PickupPool,
+} from '../pickups/PickupPool';
 import { Player, type PlayerInput } from '../player/Player';
 import { type Rarity, rarityMult, rollRarity } from '../progression/Rarity';
 import { rollUpgrades, type UpgradeOption, upgradeKey } from '../progression/Upgrades';
@@ -21,6 +30,7 @@ import { createWeapon, levelUpWeapon, updateWeapon, type WeaponInstance } from '
 import { EventRing } from './EventRing';
 import { CHEST, Interactables, SHRINE as SHRINE_KIND, VASE } from './Interactables';
 import { Obstacles } from './Obstacles';
+import { TORCH_FX, Torches } from './Torches';
 
 export interface WorldOptions {
   seed: number;
@@ -84,6 +94,7 @@ export class World {
   readonly gems = new GemPool(XB.gemCapacity);
   readonly pickups = new PickupPool(BALANCE.loot.pickupCapacity);
   readonly interactables = new Interactables(256);
+  readonly torches = new Torches(TORCH.capacity);
   /** Eşya başına sahip olunan kopya sayısı (ITEMS sırasıyla). */
   readonly itemCounts: number[] = ITEMS.map(() => 0);
   readonly enemyGrid: SpatialGrid;
@@ -133,6 +144,10 @@ export class World {
   lodestoneTimer = 0;
   /** Son Anka Tüyü dirilişinin zamanı (HUD duyurusu için; −1 = hiç). */
   revivedAt = -1;
+  /** Son Tespih'in zamanı (ekran beyaz flaşı için; −1 = hiç). */
+  holyAt = -1;
+  /** Bir sonraki meşale denemesine kalan süre. */
+  torchTimer: number = TORCH.firstDelay;
   gold = 0;
 
   /** Run başına seviye atlama hakları. */
@@ -145,6 +160,7 @@ export class World {
   private readonly buf = new Int32Array(4096);
   private readonly topDist = new Float32Array(16);
   private readonly tmp2 = new Float32Array(2);
+  private readonly tmp3 = new Float32Array(3);
 
   constructor(opts: WorldOptions) {
     this.seed = opts.seed;
@@ -205,6 +221,7 @@ export class World {
     this.updateGems(dt);
     this.updatePickups(dt);
     this.updateInteractables(dt);
+    this.updateTorches(dt);
     this.director.update(this, dt);
 
     e.removeDead();
@@ -445,6 +462,7 @@ export class World {
     const p = this.player;
     switch (kind) {
       case PICKUP_GOLD:
+      case PICKUP_BAG:
         this.gold += value * this.stats.get('goldGain');
         break;
       case PICKUP_HEAL:
@@ -453,7 +471,44 @@ export class World {
       case PICKUP_MAGNET:
         this.attract();
         break;
+      case PICKUP_CLOCK:
+        this.freezeAround(TORCH.clockRadius, TORCH.clockTime);
+        break;
+      case PICKUP_ROSARY:
+        this.smite(TORCH.rosaryRadius);
+        break;
     }
+  }
+
+  /** Saat: oyuncunun çevresindeki tüm düşmanları dondurur. */
+  freezeAround(radius: number, seconds: number): void {
+    const e = this.enemies;
+    const p = this.player;
+    for (let i = 0; i < e.count; i++) {
+      if ((e.x[i] - p.x) ** 2 + (e.z[i] - p.z) ** 2 <= radius * radius) this.freezeEnemy(i, seconds);
+    }
+    this.pulseFx.push(p.x, p.y, p.z, radius, PULSE_FREEZE);
+  }
+
+  /** Tespih: çevredeki elit olmayanlar ölür (XP düşer), elitler canlarının bir kısmını kaybeder. */
+  smite(radius: number): void {
+    const e = this.enemies;
+    const p = this.player;
+    for (let i = 0; i < e.count; i++) {
+      if (e.dead[i] || (e.x[i] - p.x) ** 2 + (e.z[i] - p.z) ** 2 > radius * radius) continue;
+      if (!e.elite[i]) {
+        this.killEnemy(i);
+        continue;
+      }
+      const dmg = e.maxHp[i] * TORCH.rosaryEliteFrac;
+      e.hp[i] -= dmg;
+      e.flash[i] = 0.12;
+      this.damageDealt += dmg;
+      this.hitFx.push(e.x[i], e.y[i] + e.hover[i] + 1, e.z[i], dmg, 1);
+      if (e.hp[i] <= 0) this.killEnemy(i);
+    }
+    this.holyAt = this.time;
+    this.pulseFx.push(p.x, p.y, p.z, radius, PULSE_HOLY);
   }
 
   /**
@@ -470,7 +525,7 @@ export class World {
     }
     const pk = this.pickups;
     for (let j = 0; j < pk.count; j++) {
-      if (pk.pull[j] !== 0 || pk.kind[j] !== PICKUP_GOLD) continue;
+      if (pk.pull[j] !== 0 || (pk.kind[j] !== PICKUP_GOLD && pk.kind[j] !== PICKUP_BAG)) continue;
       if ((pk.x[j] - p.x) ** 2 + (pk.z[j] - p.z) ** 2 <= r2) pk.pull[j] = XB.magnetBaseSpeed;
     }
   }
@@ -857,6 +912,7 @@ export class World {
 
   /** Bir küre içindeki tüm düşmanlara hasar (aura, patlama). */
   damageInRadius(x: number, y: number, z: number, r: number, base: number, knock: number): void {
+    if (this.torches.count > 0) this.hitTorches(x, z, r);
     const e = this.enemies;
     const n = this.enemyGrid.query(x, z, r + 1, this.buf);
     for (let k = 0; k < n; k++) {
@@ -976,6 +1032,7 @@ export class World {
     base: number,
     knock: number,
   ): void {
+    if (this.torches.count > 0) this.hitTorchesInSector(x, z, dirX, dirZ, r, cosHalf);
     const e = this.enemies;
     const n = this.enemyGrid.query(x, z, r + 1, this.buf);
     for (let k = 0; k < n; k++) {
@@ -987,6 +1044,25 @@ export class World {
       if (d > r + e.radius[j] || Math.abs(e.y[j] + e.hover[j] - y) > 2.5) continue;
       if (d > 1.2 && (dx * dirX + dz * dirZ) / d < cosHalf) continue;
       this.damageEnemy(j, base, (dx / d) * knock, (dz / d) * knock);
+    }
+  }
+
+  private hitTorchesInSector(
+    x: number,
+    z: number,
+    dirX: number,
+    dirZ: number,
+    r: number,
+    cosHalf: number,
+  ): void {
+    const t = this.torches;
+    for (let i = t.count - 1; i >= 0; i--) {
+      const dx = t.x[i] - x;
+      const dz = t.z[i] - z;
+      const d = Math.hypot(dx, dz) || 1e-4;
+      if (d > r + TORCH.hitRadius) continue;
+      if (d > 1.2 && (dx * dirX + dz * dirZ) / d < cosHalf) continue;
+      this.breakTorch(i);
     }
   }
 
@@ -1065,8 +1141,9 @@ export class World {
         }
       }
 
-      // Çarpışma
+      // Çarpışma: meşaleler (mermiyi tüketmez), sonra düşmanlar.
       const r = pr.radius[i];
+      if (this.torches.count > 0) this.hitTorches(pr.x[i], pr.z[i], r);
       const n = this.enemyGrid.query(pr.x[i], pr.z[i], r + 0.8, this.buf);
       for (let k = 0; k < n; k++) {
         const j = this.buf[k];
@@ -1088,6 +1165,90 @@ export class World {
           break;
         }
       }
+    }
+  }
+
+  // ---------------------------------------------------------------- Meşaleler
+
+  /** Meşale doğurur/kaldırır; oyuncu dokunursa kırar. */
+  private updateTorches(dt: number): void {
+    const t = this.torches;
+    const p = this.player;
+    for (let i = t.count - 1; i >= 0; i--) {
+      const d2 = (t.x[i] - p.x) ** 2 + (t.z[i] - p.z) ** 2;
+      if (d2 > TORCH.despawn * TORCH.despawn) t.removeAt(i);
+      else if (d2 < TORCH.touchRadius ** 2 && Math.abs(p.y - this.terrain.heightAt(t.x[i], t.z[i])) < 2) {
+        this.breakTorch(i);
+      }
+    }
+    this.torchTimer -= dt;
+    if (this.torchTimer > 0) return;
+    this.torchTimer = TORCH.interval;
+    let near = 0;
+    for (let i = 0; i < t.count; i++) {
+      if ((t.x[i] - p.x) ** 2 + (t.z[i] - p.z) ** 2 < TORCH.nearRadius ** 2) near++;
+    }
+    if (near < TORCH.maxNear) this.placeTorch();
+  }
+
+  /** Oyuncudan 15–30 m uzakta düz, engelsiz bir yere meşale koymayı dener. */
+  private placeTorch(): boolean {
+    const p = this.player;
+    const n = this.tmp3;
+    for (let tries = 0; tries < 16; tries++) {
+      const a = this.rng.range(0, Math.PI * 2);
+      const r = this.rng.range(TORCH.minDist, TORCH.maxDist);
+      const x = p.x + Math.sin(a) * r;
+      const z = p.z + Math.cos(a) * r;
+      const lim = this.terrain.playableHalf - 3;
+      if (Math.abs(x) > lim || Math.abs(z) > lim) continue;
+      this.terrain.normalAt(x, z, n);
+      if (n[1] < 0.85) continue;
+      this.obstacles.resolve(x, z, 0.8, this.tmp2);
+      if (Math.abs(this.tmp2[0] - x) > 1e-3 || Math.abs(this.tmp2[1] - z) > 1e-3) continue;
+      return this.torches.add(x, z, this.rng.range(0, Math.PI * 2)) >= 0;
+    }
+    return false;
+  }
+
+  /** Meşaleyi kırar ve seviye/Şans'a göre bir ödül düşürür. */
+  breakTorch(i: number): void {
+    const t = this.torches;
+    const x = t.x[i];
+    const z = t.z[i];
+    t.removeAt(i);
+    const y = this.terrain.heightAt(x, z);
+    this.breakFx.push(x, y, z, TORCH_FX);
+    const k = this.rng.weightedIndex(torchDropWeights(this.level, this.stats.get('luck')));
+    this.dropTorchReward(TORCH_DROPS[Math.max(0, k)].drop, x, y + 0.5, z);
+  }
+
+  private dropTorchReward(drop: TorchDrop, x: number, y: number, z: number): void {
+    switch (drop) {
+      case 'bag':
+        this.dropPickup(PICKUP_BAG, x, y, z, this.rng.int(TORCH.bagMin, TORCH.bagMax));
+        break;
+      case 'chicken':
+        this.dropPickup(PICKUP_HEAL, x, y, z, 1);
+        break;
+      case 'magnet':
+        this.dropPickup(PICKUP_MAGNET, x, y, z, 1);
+        break;
+      case 'clock':
+        this.dropPickup(PICKUP_CLOCK, x, y, z, 1);
+        break;
+      case 'rosary':
+        this.dropPickup(PICKUP_ROSARY, x, y, z, 1);
+        break;
+    }
+  }
+
+  /** Silah vuruşları meşaleleri de kırar: (x,z) çevresinde r yarıçapındakiler. */
+  private hitTorches(x: number, z: number, r: number): void {
+    const t = this.torches;
+    const rr = (r + TORCH.hitRadius) ** 2;
+    for (let i = t.count - 1; i >= 0; i--) {
+      if ((t.x[i] - x) ** 2 + (t.z[i] - z) ** 2 <= rr) this.breakTorch(i);
     }
   }
 
