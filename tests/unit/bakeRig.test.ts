@@ -4,6 +4,7 @@ import { BoxGeometry, type BufferAttribute, Matrix4, MeshLambertMaterial, Vector
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { describe, expect, it } from 'vitest';
 import { type BakedRig, bakeGltf, bakeProcedural } from '../../src/render/crowd/bakeRig';
+import { batRig, bombRig, golemRig, slimeRig } from '../../src/render/crowd/proceduralRigs';
 
 async function model(path: string) {
   const b = readFileSync(`src/assets/models/${path}.glb`);
@@ -98,5 +99,20 @@ describe('bakeRig', () => {
     expect(ty).toBeCloseTo(Math.sin((8 / 30) * Math.PI * 2), 4);
     const glow = rig.geometry.getAttribute('aGlow') as BufferAttribute;
     expect(glow.getX(glow.count - 1)).toBe(1);
+  });
+
+  it("el yapımı düşman rig'leri pişer: sonlu matrisler, gereken klipler, makul boy", () => {
+    const rigs = { slime: slimeRig(), bat: batRig(1.4), exploder: bombRig(), golem: golemRig() };
+    for (const [name, def] of Object.entries(rigs)) {
+      const rig = bakeProcedural(def);
+      expect(allFinite(rig), name).toBe(true);
+      expect(rig.clips.walk, name).toBeDefined();
+      expect(rig.clips.die, name).toBeDefined();
+      expect(rig.clips.die.loop, name).toBe(false);
+      const h = posedHeight(rig, rig.clips.walk.start);
+      expect(h, name).toBeGreaterThan(0.3);
+      expect(h, name).toBeLessThan(3);
+    }
+    expect(bakeProcedural(rigs.exploder).clips.fuse).toBeDefined();
   });
 });

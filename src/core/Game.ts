@@ -1,5 +1,6 @@
 import { BALANCE } from '../data/balance';
 import { EVOLUTION_BY_WEAPON } from '../data/evolutions';
+import { HEROES } from '../data/heroes';
 import { ITEMS } from '../data/items';
 import { SHRINE_BONUSES } from '../data/shrines';
 import { TOME_INDEX, TOMES } from '../data/tomes';
@@ -21,6 +22,7 @@ import { randomSeed } from './Rng';
 type State = 'menu' | 'playing' | 'levelup' | 'reward' | 'paused' | 'gameover';
 
 const STEP = BALANCE.simStep;
+const HERO_KEY = 'spawn.hero';
 const MAX_STEPS_PER_FRAME = 5;
 
 /**
@@ -61,10 +63,36 @@ export class Game {
 
     this.world = this.createWorld();
     this.bindKeys();
-    this.screens.showStart(() => this.startRun());
+    this.showStart();
 
     // Test ve hata ayıklama için konsoldan erişim.
     (window as unknown as { game: Game }).game = this;
+  }
+
+  /** Seçilen maceracı tarayıcıda hatırlanır (gizli pencerede depolama olmayabilir). */
+  private heroId = (() => {
+    try {
+      return localStorage.getItem(HERO_KEY) ?? HEROES[0].id;
+    } catch {
+      return HEROES[0].id;
+    }
+  })();
+
+  private showStart(): void {
+    this.renderer.setHero(this.heroId);
+    this.screens.showStart(() => this.startRun(), {
+      list: HEROES,
+      selected: this.heroId,
+      onSelect: (id) => {
+        this.heroId = id;
+        this.renderer.setHero(id);
+        try {
+          localStorage.setItem(HERO_KEY, id);
+        } catch {
+          // depolama yoksa seçim yalnızca bu oturumda geçerli
+        }
+      },
+    });
   }
 
   /** Mevcut dünya (testler/konsol için). */

@@ -58,41 +58,6 @@ export function build(parts: Part[]): BufferGeometry {
 }
 
 const WHITE = 0xffffff;
-const EYE = 0x1a1a22;
-
-export function slimeGeometry(): BufferGeometry {
-  const body = new IcosahedronGeometry(0.58, 1);
-  body.scale(1, 0.78, 1);
-  body.translate(0, 0.45, 0);
-  const eyeL = new SphereGeometry(0.09, 6, 4).translate(-0.18, 0.62, 0.45);
-  const eyeR = new SphereGeometry(0.09, 6, 4).translate(0.18, 0.62, 0.45);
-  return build([
-    [body, WHITE],
-    [eyeL, EYE],
-    [eyeR, EYE],
-  ]);
-}
-
-export function batGeometry(): BufferGeometry {
-  const body = new IcosahedronGeometry(0.3, 0).translate(0, 0, 0);
-  const wingL = new ConeGeometry(0.35, 0.8, 3)
-    .rotateZ(Math.PI / 2)
-    .scale(1, 0.25, 1)
-    .translate(-0.55, 0.05, 0);
-  const wingR = new ConeGeometry(0.35, 0.8, 3)
-    .rotateZ(-Math.PI / 2)
-    .scale(1, 0.25, 1)
-    .translate(0.55, 0.05, 0);
-  const eyeL = new SphereGeometry(0.06, 5, 4).translate(-0.1, 0.08, 0.25);
-  const eyeR = new SphereGeometry(0.06, 5, 4).translate(0.1, 0.08, 0.25);
-  return build([
-    [body, WHITE],
-    [wingL, 0xb9a3e8],
-    [wingR, 0xb9a3e8],
-    [eyeL, 0xffe14d],
-    [eyeR, 0xffe14d],
-  ]);
-}
 
 export function treeGeometry(): BufferGeometry {
   const trunk = new CylinderGeometry(0.18, 0.28, 1.4, 6).translate(0, 0.7, 0);
@@ -142,38 +107,6 @@ export function pelletGeometry(): BufferGeometry {
 export function orbGeometry(): BufferGeometry {
   const rock = new DodecahedronGeometry(0.42, 0);
   return build([[rock, 0xb7a6ff]]);
-}
-
-export function golemGeometry(): BufferGeometry {
-  const body = new DodecahedronGeometry(0.75, 0).scale(1, 1.1, 0.85).translate(0, 1, 0);
-  const head = new DodecahedronGeometry(0.38, 0).translate(0, 1.95, 0.1);
-  const armL = new DodecahedronGeometry(0.32, 0).scale(1, 1.6, 1).translate(-0.85, 0.8, 0.1);
-  const armR = new DodecahedronGeometry(0.32, 0).scale(1, 1.6, 1).translate(0.85, 0.8, 0.1);
-  const eyeL = new SphereGeometry(0.07, 5, 4).translate(-0.14, 2, 0.42);
-  const eyeR = new SphereGeometry(0.07, 5, 4).translate(0.14, 2, 0.42);
-  return build([
-    [body, WHITE],
-    [head, WHITE],
-    [armL, 0xcfc6b8],
-    [armR, 0xcfc6b8],
-    [eyeL, 0xffa21a],
-    [eyeR, 0xffa21a],
-  ]);
-}
-
-export function bombGeometry(): BufferGeometry {
-  const body = new IcosahedronGeometry(0.5, 1).translate(0, 0.55, 0);
-  const fuse = new CylinderGeometry(0.06, 0.06, 0.3, 5).translate(0, 1.15, 0);
-  const spark = new IcosahedronGeometry(0.1, 0).translate(0, 1.32, 0);
-  const eyeL = new SphereGeometry(0.08, 6, 4).translate(-0.17, 0.68, 0.42);
-  const eyeR = new SphereGeometry(0.08, 6, 4).translate(0.17, 0.68, 0.42);
-  return build([
-    [body, WHITE],
-    [fuse, 0x3a3a40],
-    [spark, 0xfff2a8],
-    [eyeL, 0xffffff],
-    [eyeR, 0xffffff],
-  ]);
 }
 
 export function arrowGeometry(): BufferGeometry {

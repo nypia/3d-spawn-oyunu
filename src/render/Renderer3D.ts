@@ -14,7 +14,7 @@ import type { World } from '../sim/world/World';
 import type { GameAssets } from './assets/loadAssets';
 import { CameraRig } from './CameraRig';
 import { DamageNumbers } from './DamageNumbers';
-import { PlayerView } from './PlayerView';
+import { HeroView } from './HeroView';
 import { PropsView } from './PropsView';
 import { PulseFx } from './PulseFx';
 import type { QualitySettings } from './Quality';
@@ -30,7 +30,7 @@ export class Renderer3D {
   readonly camera: PerspectiveCamera;
   readonly rig: CameraRig;
   private readonly sun: DirectionalLight;
-  private readonly playerView = new PlayerView();
+  private readonly hero: HeroView;
   private readonly worldView: WorldView;
   private readonly weaponFx = new WeaponFx();
   private readonly props: PropsView;
@@ -76,10 +76,11 @@ export class Renderer3D {
     this.scene.add(this.sun, this.sun.target);
 
     this.worldView = new WorldView(enemyCapacity, quality.shadows, assets);
+    this.hero = new HeroView(assets, quality.shadows);
     this.props = new PropsView(quality.shadows);
     this.scene.add(
       this.worldView.root,
-      this.playerView.root,
+      ...this.hero.objects,
       this.weaponFx.root,
       this.props.root,
       this.pulses.mesh,
@@ -92,6 +93,11 @@ export class Renderer3D {
 
   get canvas(): HTMLCanvasElement {
     return this.renderer.domElement;
+  }
+
+  /** Başlangıç ekranındaki kozmetik karakter seçimi. */
+  setHero(id: string): void {
+    this.hero.setHero(id);
   }
 
   setWorld(world: World): void {
@@ -121,7 +127,7 @@ export class Renderer3D {
     this.sun.position.set(p.x + 25, p.y + 45, p.z + 15);
     this.sun.target.position.set(p.x, p.y, p.z);
 
-    this.playerView.update(p, dt, this.time);
+    this.hero.update(p, world.terrain, dt, this.time, world.gameOver);
     this.worldView.update(world, this.time, dt);
     this.weaponFx.update(world, this.time, dt);
     this.props.update(world, this.time);

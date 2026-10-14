@@ -2,12 +2,13 @@ import { CylinderGeometry, MeshLambertMaterial, TorusGeometry } from 'three';
 import { ENEMIES } from '../../data/enemies';
 import type { GameAssets } from '../assets/loadAssets';
 import { build } from '../shapes';
-import { type BakedClip, type BakedRig, bakeGltf } from './bakeRig';
+import { type BakedClip, type BakedRig, bakeGltf, bakeProcedural } from './bakeRig';
 import { CrowdMesh } from './CrowdMesh';
+import { batRig, bombRig, golemRig, slimeRig } from './proceduralRigs';
 
 /**
- * Düşman türü → animasyonlu kalabalık modeli. Henüz model atanmamış türler (null) WorldView'daki
- * prosedürel şekillerle çizilir.
+ * Düşman türü → animasyonlu kalabalık modeli: İskelet ve Okçu Kenney modelleri, Balçık, Yarasa, Patlayan ve
+ * Golem koddan çizilmiş rig'ler.
  */
 export interface EnemyLook {
   crowd: CrowdMesh;
@@ -15,6 +16,8 @@ export interface EnemyLook {
   die: BakedClip;
   /** Okçu: yay çekme/atış klibi. */
   shoot?: BakedClip;
+  /** Patlayan: fitil yanarken şişme. */
+  fuse?: BakedClip;
   /** Bir yürüme döngüsünde alınan yol (m): animasyon hızı gerçek yürüyüşe bağlı. */
   stride: number;
 }
@@ -35,8 +38,16 @@ function bowGeometry() {
   ]);
 }
 
-function bake(assets: GameAssets, id: string): BakedRig | null {
+function bake(assets: GameAssets, id: string, hover: number): BakedRig | null {
   switch (id) {
+    case 'slime':
+      return bakeProcedural(slimeRig());
+    case 'bat':
+      return bakeProcedural(batRig(hover));
+    case 'exploder':
+      return bakeProcedural(bombRig());
+    case 'golem':
+      return bakeProcedural(golemRig());
     case 'skeleton':
       return bakeGltf(assets.model('graveyard/character-skeleton'), {
         height: 1.75,
@@ -58,11 +69,18 @@ function bake(assets: GameAssets, id: string): BakedRig | null {
   }
 }
 
-const STRIDE: Record<string, number> = { skeleton: 2.1, archer: 2.3 };
+const STRIDE: Record<string, number> = {
+  slime: 1.6,
+  skeleton: 2.1,
+  bat: 2,
+  exploder: 1.4,
+  archer: 2.3,
+  golem: 2.2,
+};
 
 export function buildEnemyLooks(assets: GameAssets, capacity: number): (EnemyLook | null)[] {
   return ENEMIES.map((def) => {
-    const rig = bake(assets, def.id);
+    const rig = bake(assets, def.id, def.hover);
     if (!rig) return null;
     const crowd = new CrowdMesh(rig, capacity);
     crowd.name = `enemy:${def.id}`;
@@ -71,6 +89,7 @@ export function buildEnemyLooks(assets: GameAssets, capacity: number): (EnemyLoo
       walk: crowd.clip('walk'),
       die: crowd.clip('die'),
       shoot: rig.clips.shoot,
+      fuse: rig.clips.fuse,
       stride: STRIDE[def.id] ?? 2,
     };
   });

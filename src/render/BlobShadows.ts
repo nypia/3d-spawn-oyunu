@@ -18,7 +18,11 @@ const scl = new Vector3();
 const normal = new Float32Array(3);
 const nrm = new Vector3();
 
-function radialTexture(): CanvasTexture {
+let shared: CanvasTexture | null = null;
+
+/** Yumuşak kenarlı yuvarlak gölge dokusu (tek örnek, paylaşılır). */
+export function radialShadowTexture(): CanvasTexture {
+  if (shared) return shared;
   const c = document.createElement('canvas');
   c.width = c.height = 64;
   const g = c.getContext('2d');
@@ -30,7 +34,8 @@ function radialTexture(): CanvasTexture {
     g.fillStyle = grad;
     g.fillRect(0, 0, 64, 64);
   }
-  return new CanvasTexture(c);
+  shared = new CanvasTexture(c);
+  return shared;
 }
 
 /**
@@ -43,7 +48,7 @@ export class BlobShadows {
 
   constructor(capacity: number) {
     const mat = new MeshBasicMaterial({
-      map: radialTexture(),
+      map: radialShadowTexture(),
       transparent: true,
       depthWrite: false,
       opacity: 0.55,

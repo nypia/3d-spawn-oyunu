@@ -24,29 +24,16 @@ import type { World } from '../sim/world/World';
 import type { GameAssets } from './assets/loadAssets';
 import { BlobShadows } from './BlobShadows';
 import { buildEnemyLooks, type EnemyLook } from './crowd/enemyLooks';
-import {
-  arrowGeometry,
-  batGeometry,
-  bombGeometry,
-  gemGeometry,
-  golemGeometry,
-  puffGeometry,
-  rockGeometry,
-  slimeGeometry,
-  treeGeometry,
-} from './shapes';
+import { arrowGeometry, gemGeometry, puffGeometry, rockGeometry, treeGeometry } from './shapes';
 import { createTerrainMesh } from './TerrainView';
 
 const UP = new Vector3(0, 1, 0);
-const FWD = new Vector3(0, 0, 1);
-const quatTilt = new Quaternion();
 const m4 = new Matrix4();
 const pos = new Vector3();
 const quat = new Quaternion();
 const scl = new Vector3();
 const col = new Color();
 const WHITE = new Color(1, 1, 1);
-const FLASH = new Color(3, 3, 3);
 /** Elitler altın tonda parlar. */
 const ELITE_TINT = new Color(1.7, 1.35, 0.55);
 const FUSE_FLASH = new Color(3, 2.2, 1.2);
@@ -102,9 +89,7 @@ export class WorldView {
   private terrain: Mesh | null = null;
   private trees: InstancedMesh | null = null;
   private rocks: InstancedMesh | null = null;
-  /** Prosedürel şekilli türler (modeli olanlar için null). */
-  private readonly enemyMeshes: (InstancedMesh | null)[];
-  /** Modelli, animasyonlu türler (CrowdMesh). */
+  /** Tür başına animasyonlu kalabalık (CrowdMesh). */
   private readonly looks: (EnemyLook | null)[];
   private readonly lookCounts: number[];
   private readonly corpses: Corpse[] = [];
@@ -132,23 +117,6 @@ export class WorldView {
       look.crowd.setColorAt(0, WHITE);
       this.root.add(look.crowd);
     }
-    const geoByShape = {
-      blob: slimeGeometry,
-      bat: batGeometry,
-      golem: golemGeometry,
-      bomb: bombGeometry,
-    };
-    this.enemyMeshes = ENEMIES.map((def, t) => {
-      if (this.looks[t]) return null;
-      const shape = def.shape as keyof typeof geoByShape;
-      const mat = new MeshLambertMaterial({ color: def.color, vertexColors: true, flatShading: true });
-      // Düşmanlar gerçek gölge atmaz (kalabalıkta pahalı); altlarında blob gölge var.
-      const mesh = instanced(geoByShape[shape](), mat, enemyCapacity, false);
-      mesh.setColorAt(0, WHITE);
-      mesh.name = `enemy:${def.id}`;
-      this.root.add(mesh);
-      return mesh;
-    });
     this.blobs = new BlobShadows(enemyCapacity + CORPSE_CAP);
     this.root.add(this.blobs.mesh);
 
@@ -260,92 +228,16 @@ export class WorldView {
 
   private updateEnemies(world: World, time: number, dt: number): void {
     const e = world.enemies;
-    const counts = this.enemyMeshes.map(() => 0);
     this.lookCounts.fill(0);
     this.blobs.begin();
     for (let i = 0; i < e.count; i++) {
       if (e.dead[i]) continue;
       const type = e.type[i];
-      const def = ENEMIES[type];
-      this.blobs.add(world.terrain, e.x[i], e.z[i], def.radius * e.scale[i] * 1.2, e.hover[i]);
-      // Donmuş düşmanın animasyonu durur (poz sabit kalır).
-      const frozen = e.frozen[i] > 0;
       const look = this.looks[type];
-      if (look) {
-        this.drawModelEnemy(world, look, i, frozen);
-        continue;
-      }
-      const mesh = this.enemyMeshes[type];
-      if (!mesh) continue;
-      const ph = e.phase[i] + (frozen ? 0 : time * (4 + e.speed[i]));
-      let y = e.y[i] + e.hover[i];
-      let sx = def.scale * e.scale[i];
-      let sy = def.scale * e.scale[i];
-      let tilt = 0;
-      let fusing = false;
-      switch (def.shape) {
-        case 'blob': {
-          // Zıplayarak ilerleme + basık/uzun.
-          const hop = Math.abs(Math.sin(ph * 0.8));
-          y += hop * 0.35;
-          sy *= 0.85 + hop * 0.3;
-          sx *= 1.12 - hop * 0.15;
-          break;
-        }
-        case 'capsule':
-          tilt = Math.sin(ph) * 0.15;
-          y += Math.abs(Math.cos(ph)) * 0.08;
-          break;
-        case 'bat':
-          y += Math.sin(ph * 1.7) * 0.3;
-          sx *= 0.75 + Math.abs(Math.sin(ph * 3)) * 0.5;
-          break;
-        case 'golem':
-          tilt = Math.sin(ph * 0.6) * 0.08;
-          y += Math.abs(Math.sin(ph * 0.6)) * 0.05;
-          break;
-        case 'archer':
-          y += Math.abs(Math.sin(ph)) * 0.05;
-          break;
-        case 'bomb':
-          if (e.timer[i] >= 0) {
-            // Fitil yanıyor: şişer ve yanıp söner.
-            fusing = true;
-            const g = 1 + (1 - e.timer[i] / EXPLODER.fuse) * 0.45;
-            sx *= g;
-            sy *= g;
-          } else {
-            y += Math.abs(Math.sin(ph * 1.2)) * 0.2;
-          }
-          break;
-      }
-      pos.set(e.x[i], y, e.z[i]);
-      // Okçu hep oyuncuya bakar (geri çekilirken bile).
-      const yaw =
-        def.behavior === 'ranged'
-          ? Math.atan2(world.player.x - e.x[i], world.player.z - e.z[i])
-          : Math.atan2(e.vx[i], e.vz[i]);
-      quat.setFromAxisAngle(UP, yaw);
-      if (tilt !== 0) {
-        quatTilt.setFromAxisAngle(FWD, tilt);
-        quat.multiply(quatTilt);
-      }
-      scl.set(sx, sy, sx);
-      m4.compose(pos, quat, scl);
-      const k = counts[type]++;
-      mesh.setMatrixAt(k, m4);
-      const blink = fusing && !frozen && Math.floor(time * 12) % 2 === 0;
-      mesh.setColorAt(
-        k,
-        e.flash[i] > 0 ? FLASH : frozen ? ICE_TINT : blink ? FUSE_FLASH : e.elite[i] ? ELITE_TINT : WHITE,
-      );
+      if (!look) continue;
+      this.blobs.add(world.terrain, e.x[i], e.z[i], ENEMIES[type].radius * e.scale[i] * 1.2, e.hover[i]);
+      this.drawEnemy(world, look, i, time);
     }
-    this.enemyMeshes.forEach((mesh, t) => {
-      if (!mesh) return;
-      mesh.count = counts[t];
-      mesh.instanceMatrix.needsUpdate = true;
-      if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
-    });
     this.updateCorpses(dt);
     this.looks.forEach((look, t) => {
       look?.crowd.commit(this.lookCounts[t]);
@@ -353,9 +245,11 @@ export class WorldView {
     this.blobs.end();
   }
 
-  /** Modelli düşman: konum/yön/boy, renk tonu ve animasyon karesi. */
-  private drawModelEnemy(world: World, look: EnemyLook, i: number, frozen: boolean): void {
+  /** Düşman: konum/yön/boy, renk tonu ve animasyon karesi. */
+  private drawEnemy(world: World, look: EnemyLook, i: number, time: number): void {
     const e = world.enemies;
+    // Donmuş düşmanın animasyonu durur (yürüdüğü yol artmaz, poz sabit kalır).
+    const frozen = e.frozen[i] > 0;
     const type = e.type[i];
     const def = ENEMIES[type];
     const k = this.lookCounts[type]++;
@@ -368,11 +262,16 @@ export class WorldView {
     m4.compose(pos, quat, scl);
     const crowd = look.crowd;
     crowd.setMatrixAt(k, m4);
-    crowd.setColorAt(k, frozen ? ICE_TINT : e.elite[i] ? ELITE_TINT : WHITE);
     const flash = e.flash[i] > 0 ? 0.9 : frozen ? -1 : 0;
+    // Patlayanın fitili yanıyor: şişer ve turuncu yanıp söner.
+    const fusing = !!look.fuse && e.timer[i] >= 0;
+    const blink = fusing && !frozen && Math.floor(time * 12) % 2 === 0;
+    crowd.setColorAt(k, frozen ? ICE_TINT : blink ? FUSE_FLASH : e.elite[i] ? ELITE_TINT : WHITE);
     // Okçu atıştan hemen önce yayı çeker; diğerleri yürüdükleri yol kadar adım atar.
     const draw = 0.6;
-    if (look.shoot && !frozen && e.timer[i] >= 0 && e.timer[i] < draw) {
+    if (look.fuse && fusing) {
+      crowd.setAnim(k, look.fuse, EXPLODER.fuse - e.timer[i], flash);
+    } else if (look.shoot && !frozen && e.timer[i] >= 0 && e.timer[i] < draw) {
       crowd.setAnim(k, look.shoot, ((draw - e.timer[i]) / draw) * look.shoot.duration, flash);
     } else {
       const cycle = (e.travel[i] + e.phase[i] * look.stride) / look.stride;

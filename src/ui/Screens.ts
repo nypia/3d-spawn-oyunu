@@ -1,5 +1,6 @@
 import { BALANCE } from '../data/balance';
 import { EVOLUTIONS } from '../data/evolutions';
+import type { HeroDef } from '../data/heroes';
 import { ITEMS } from '../data/items';
 import { TOME_INDEX, TOMES } from '../data/tomes';
 import { WEAPON_INDEX, WEAPONS, weaponMaxLevel } from '../data/weapons';
@@ -28,6 +29,12 @@ export interface EvolutionView {
 }
 
 export type GuideTab = 'items' | 'evolutions';
+
+export interface HeroPicker {
+  list: readonly HeroDef[];
+  selected: string;
+  onSelect: (id: string) => void;
+}
 
 export interface ShrineView {
   icon: string;
@@ -69,9 +76,10 @@ export class Screens {
     this.el.style.display = '';
   }
 
-  showStart(onPlay: () => void): void {
+  showStart(onPlay: () => void, heroes?: HeroPicker): void {
     const play = h('button.btn.btn-primary', { 'data-testid': 'play' }, 'OYNA');
     play.addEventListener('click', onPlay);
+    const picker = heroes ? heroPicker(heroes) : '';
     const keys = [
       ['WASD', 'Hareket'],
       ['Fare', 'Kamera (tıkla → kilitle)'],
@@ -97,6 +105,7 @@ export class Screens {
       h('h1.title', {}, 'SPAWN'),
       h('p.subtitle', {}, '3D survivors-like · prototip v0.3'),
       h('p.lead', {}, 'Silahların otomatik saldırır. Hayatta kal, XP topla, güçlen.'),
+      picker,
       controls,
       play,
     );
@@ -371,4 +380,24 @@ function evolutionGuide(world: World): HTMLElement {
     h('p.note', {}, 'Silah maks seviyede ve eşleşen kitap sende varken açtığın sandık evrim verir.'),
     h('section.guide-group', { 'data-rarity': '3' }, h('ul', {}, ...rows)),
   );
+}
+
+/** Maceracı seçimi: seçilen karakter arkadaki sahnede hemen değişir. */
+function heroPicker(p: HeroPicker): HTMLElement {
+  const buttons = p.list.map((hero) => {
+    const b = h(
+      `button.hero-chip${hero.id === p.selected ? '.active' : ''}`,
+      { 'data-testid': `hero-${hero.id}`, 'aria-pressed': String(hero.id === p.selected) },
+      hero.name,
+    );
+    b.addEventListener('click', () => {
+      for (const other of buttons) {
+        other.classList.toggle('active', other === b);
+        other.setAttribute('aria-pressed', String(other === b));
+      }
+      p.onSelect(hero.id);
+    });
+    return b;
+  });
+  return h('div.hero-picker', {}, h('span.hero-label', {}, 'Maceracın:'), ...buttons);
 }
