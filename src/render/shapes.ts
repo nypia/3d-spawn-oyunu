@@ -65,10 +65,6 @@ export function boltGeometry(): BufferGeometry {
   return new IcosahedronGeometry(1, 0);
 }
 
-export function puffGeometry(): BufferGeometry {
-  return new IcosahedronGeometry(0.5, 0);
-}
-
 export function axeGeometry(): BufferGeometry {
   const handle = new CylinderGeometry(0.05, 0.05, 1.1, 5).rotateZ(Math.PI / 2);
   const blade = new ConeGeometry(0.32, 0.5, 4)

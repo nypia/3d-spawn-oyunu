@@ -100,6 +100,23 @@ body {
   font-weight: 700;
 }
 
+.vignette,
+.hurt-vignette {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* Kenarları hafifçe karartır, göz ortadaki kahramana gider. */
+.vignette {
+  background: radial-gradient(ellipse at center, transparent 58%, rgb(10 20 40 / 32%) 100%);
+}
+
+.hurt-vignette {
+  background: radial-gradient(ellipse at center, transparent 45%, rgb(220 20 30 / 75%) 100%);
+  opacity: 0;
+}
+
 .screen-flash {
   position: absolute;
   inset: 0;
@@ -769,6 +786,8 @@ kbd {
 .loading {
   position: absolute;
   inset: 0;
+  /* Oyun arayüzü arkada kurulurken (shader ısındırma) üstte kalsın. */
+  z-index: 50;
   display: grid;
   place-content: center;
   justify-items: center;

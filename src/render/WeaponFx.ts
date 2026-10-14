@@ -31,6 +31,9 @@ const quat = new Quaternion();
 const scl = new Vector3();
 const dir = new Vector3();
 
+/** Parıltı kartı ekleyici: konum, boy, renk (hex). */
+export type Halo = (x: number, y: number, z: number, size: number, hex: number) => void;
+
 const SWING_LIFE = 0.18;
 const BEAM_LIFE = 0.15;
 
@@ -91,7 +94,12 @@ export class WeaponFx {
     this.pellets = instanced(pelletGeometry(), new MeshBasicMaterial({ color: 0xffe08a }), 512);
     this.orbs = instanced(
       orbGeometry(),
-      new MeshLambertMaterial({ vertexColors: true, emissive: 0x2a1f66, flatShading: true }),
+      new MeshLambertMaterial({
+        vertexColors: true,
+        emissive: 0x2a1f66,
+        emissiveIntensity: 2.5,
+        flatShading: true,
+      }),
       24,
     );
     this.orbs.castShadow = true;
@@ -155,10 +163,11 @@ export class WeaponFx {
     this.beamCursor = world.beamFx.written;
   }
 
-  update(world: World, time: number, dt: number): void {
+  /** `halo`: yörünge taşlarının parıltı kartı (Effects). */
+  update(world: World, time: number, dt: number, halo?: Halo): void {
     this.applyTints(world);
     this.updateProjectiles(world, time);
-    this.updateOrbs(world, time);
+    this.updateOrbs(world, time, halo);
     this.updateSwings(world, dt);
     this.updateBeams(world, dt);
     this.updateBlasts(world);
@@ -166,15 +175,16 @@ export class WeaponFx {
 
   /** Evrimleşmiş silahlar kendi renginde görünür (her davranış tek bir silaha ait). */
   private applyTints(world: World): void {
-    const basic = (m: InstancedMesh | Mesh, behavior: WeaponBehavior, base: number) => {
-      (m.material as MeshBasicMaterial).color.setHex(world.tintOf(behavior) || base);
+    // HDR şiddet (>1): yüksek kalitede bloom ile parlar.
+    const basic = (m: InstancedMesh | Mesh, behavior: WeaponBehavior, base: number, glow = 1) => {
+      (m.material as MeshBasicMaterial).color.setHex(world.tintOf(behavior) || base).multiplyScalar(glow);
     };
-    basic(this.bolts, 'homingBolt', 0xaee9ff);
-    basic(this.pellets, 'cone', 0xffe08a);
-    basic(this.beams, 'chain', 0xd8f3ff);
-    basic(this.rings, 'mortar', 0xff5a3d);
+    basic(this.bolts, 'homingBolt', 0xaee9ff, 2.6);
+    basic(this.pellets, 'cone', 0xffe08a, 2.2);
+    basic(this.beams, 'chain', 0xd8f3ff, 3);
+    basic(this.rings, 'mortar', 0xff5a3d, 1.6);
     basic(this.fills, 'mortar', 0xff5a3d);
-    for (const m of this.swingMeshes) basic(m, 'arc', 0xffffff);
+    for (const m of this.swingMeshes) basic(m, 'arc', 0xffffff, 1.6);
     const orb = world.tintOf('orbit');
     (this.orbs.material as MeshLambertMaterial).emissive.setHex(orb ? orb & 0x7f7f7f : 0x2a1f66);
     const axe = world.tintOf('boomerang');
@@ -220,8 +230,9 @@ export class WeaponFx {
     }
   }
 
-  private updateOrbs(world: World, time: number): void {
+  private updateOrbs(world: World, time: number, halo?: Halo): void {
     const p = world.player;
+    const tint = world.tintOf('orbit') || 0x8f7bff;
     let k = 0;
     for (const w of world.weapons) {
       if (w.def.behavior !== 'orbit') continue;
@@ -235,6 +246,7 @@ export class WeaponFx {
         scl.setScalar(s);
         m4.compose(pos, quat, scl);
         this.orbs.setMatrixAt(k++, m4);
+        halo?.(pos.x, pos.y, pos.z, 2.2 * s, tint);
       }
     }
     this.orbs.count = k;

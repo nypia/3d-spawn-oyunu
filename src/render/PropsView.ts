@@ -134,7 +134,8 @@ export class PropsView {
     this.graves = GRAVES.map((k) => instancedModel(assets, `graveyard/${k}`, 2, 64, shadows));
     this.braziers = instanced(brazierGeometry(), 16, shadows);
     this.flames = instanced(flameGeometry(), 16, false);
-    this.flames.material = new MeshBasicMaterial({ vertexColors: true });
+    // Alev HDR parlar (bloom); düşük kalitede parıltı kartı Effects'te.
+    this.flames.material = new MeshBasicMaterial({ vertexColors: true, color: new Color(2.2, 2.2, 2.2) });
     const coins = instancedModel(assets, 'dungeon/coin', 0.75, 400, false);
     const coinMat = (coins.material as MeshLambertMaterial).clone();
     coinMat.emissive.setHex(0x5a3c00);

@@ -14,19 +14,21 @@ import { PULSE_FREEZE, PULSE_HOLY, PULSE_MAGNET, PULSE_PHOENIX, type World } fro
 
 const LIFE = 0.7;
 const CAP = 24;
-const COLORS: Record<number, Color> = {
-  [PULSE_MAGNET]: new Color(0xff5a5a),
-  [PULSE_FREEZE]: new Color(0x8fe6ff),
-  [PULSE_HOLY]: new Color(0xfff2b0),
-  [PULSE_PHOENIX]: new Color(0xff9a3d),
+const COLORS: Record<number, number> = {
+  [PULSE_MAGNET]: 0xff5a5a,
+  [PULSE_FREEZE]: 0x8fe6ff,
+  [PULSE_HOLY]: 0xfff2b0,
+  [PULSE_PHOENIX]: 0xff9a3d,
 };
+/** HDR şiddet: bloom'da parlasın. */
+const INTENSITY = 2.2;
 
 interface Pulse {
   x: number;
   y: number;
   z: number;
   radius: number;
-  kind: number;
+  color: number;
   t: number;
 }
 
@@ -37,7 +39,7 @@ const scl = new Vector3();
 const col = new Color();
 
 /**
- * Yerde yayılan halka: Mıknatıs Taşı çekişi, Saat'in donma dalgası, Tespih, Anka dirilişi.
+ * Yerde yayılan halka: Mıknatıs Taşı çekişi, Saat'in donma dalgası, Tespih, Anka dirilişi, seviye atlama.
  * Toplamalı karışımla rengi siyaha solarak kaybolur.
  */
 export class PulseFx {
@@ -67,10 +69,15 @@ export class PulseFx {
     this.cursor = world.pulseFx.written;
   }
 
+  /** Render tarafından tetiklenen halka (ör. seviye atlama). */
+  spawn(x: number, y: number, z: number, radius: number, hex: number): void {
+    if (this.list.length >= CAP) this.list.shift();
+    this.list.push({ x, y, z, radius, color: hex, t: 0 });
+  }
+
   update(world: World, dt: number): void {
     this.cursor = world.pulseFx.drain(this.cursor, (d, o) => {
-      if (this.list.length >= CAP) this.list.shift();
-      this.list.push({ x: d[o], y: d[o + 1], z: d[o + 2], radius: d[o + 3], kind: d[o + 4], t: 0 });
+      this.spawn(d[o], d[o + 1], d[o + 2], d[o + 3], COLORS[d[o + 4]] ?? COLORS[PULSE_HOLY]);
     });
     let k = 0;
     quat.identity();
@@ -87,7 +94,7 @@ export class PulseFx {
       scl.setScalar(Math.max(0.01, p.radius * grow));
       m4.compose(pos, quat, scl);
       this.mesh.setMatrixAt(k, m4);
-      col.copy(COLORS[p.kind] ?? COLORS[PULSE_HOLY]).multiplyScalar(1 - u);
+      col.setHex(p.color).multiplyScalar(INTENSITY * (1 - u));
       this.mesh.setColorAt(k, col);
       k++;
     }

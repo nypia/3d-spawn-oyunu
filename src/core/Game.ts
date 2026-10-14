@@ -49,7 +49,13 @@ export class Game {
     this.flags = readFlags(location.search, location.hash);
     this.quality = detectQuality(this.flags.quality);
     const bench = this.flags.bench;
-    this.renderer = new Renderer3D(root, this.quality, Math.max(1200, bench), assets);
+    this.renderer = new Renderer3D(
+      root,
+      this.quality,
+      Math.max(1200, bench),
+      assets,
+      this.flags.quality === null && bench === 0,
+    );
     this.input = new Input(this.renderer.canvas);
     this.hud = new Hud(root);
     // Katman sırası: canvas < HUD < dokunmatik kontroller < menüler (kartlara dokunulabilsin).
@@ -93,6 +99,11 @@ export class Game {
         }
       },
     });
+  }
+
+  /** Shader'ları önceden derler (açılış ekranı arkasında). */
+  warmUp(): Promise<void> {
+    return this.renderer.warmUp();
   }
 
   /** Mevcut dünya (testler/konsol için). */

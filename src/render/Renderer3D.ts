@@ -1,19 +1,28 @@
 import {
   DirectionalLight,
   Fog,
+  HalfFloatType,
   HemisphereLight,
   NeutralToneMapping,
+  type Object3D,
   PCFShadowMap,
   PerspectiveCamera,
   Scene,
   SRGBColorSpace,
+  Vector2,
   Vector3,
   WebGLRenderer,
+  WebGLRenderTarget,
 } from 'three';
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import type { World } from '../sim/world/World';
 import type { GameAssets } from './assets/loadAssets';
 import { CameraRig } from './CameraRig';
 import { DamageNumbers } from './DamageNumbers';
+import { Effects } from './fx/Effects';
 import { HeroView } from './HeroView';
 import { PropsView } from './PropsView';
 import { PulseFx } from './PulseFx';
@@ -41,16 +50,31 @@ export class Renderer3D {
   private readonly sky = new Sky(SUN_DIR);
   private readonly scatter: Scatter;
   readonly damageNumbers = new DamageNumbers();
+  private readonly effects: Effects;
+  /** Yalnızca yüksek kalitede: bloom (parlayan taş, büyü, alev) için HDR art işlem. */
+  private composer: EffectComposer | null = null;
   private time = 0;
+  /** Kare hızı hedefin altında geçen süre (otomatik kalite düşürme). */
+  private slowTime = 0;
+  private pixelRatio: number;
 
   constructor(
     container: HTMLElement,
     quality: QualitySettings,
     enemyCapacity: number,
     readonly assets: GameAssets,
+    /** Kalite elle seçilmediyse yavaş cihazda bloom ve çözünürlük kendiliğinden düşer. */
+    private readonly adaptive = false,
   ) {
-    this.renderer = new WebGLRenderer({ antialias: quality.antialias, powerPreference: 'high-performance' });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, quality.maxPixelRatio));
+    // Bloom varken kenar yumuşatma composer'ın MSAA hedefinde yapılır (tuval MSAA'sı boşa gider).
+    this.renderer = new WebGLRenderer({
+      antialias: quality.antialias && !quality.bloom,
+      powerPreference: 'high-performance',
+    });
+    this.pixelRatio = Math.min(window.devicePixelRatio, quality.maxPixelRatio);
+    this.renderer.setPixelRatio(this.pixelRatio);
+    // Composer birden çok geçiş çizer: sayaçları kare başında biz sıfırlarız (DebugOverlay doğru saysın).
+    this.renderer.info.autoReset = false;
     this.renderer.outputColorSpace = SRGBColorSpace;
     // Neutral: ACES çizgi film renklerini soldurur, bu doygunluğu korur.
     this.renderer.toneMapping = NeutralToneMapping;
@@ -88,18 +112,33 @@ export class Renderer3D {
     this.worldView = new WorldView(enemyCapacity, quality.shadows, assets);
     this.hero = new HeroView(assets, quality.shadows);
     this.props = new PropsView(quality.shadows, assets);
+    this.effects = new Effects(assets, quality.name === 'low', quality.bloom, this.pulses);
     this.scene.add(
       this.worldView.root,
       ...this.hero.objects,
       this.weaponFx.root,
       this.props.root,
       this.pulses.mesh,
+      this.effects.root,
       this.damageNumbers.mesh,
     );
+
+    if (quality.bloom) {
+      const target = new WebGLRenderTarget(1, 1, { type: HalfFloatType, samples: quality.antialias ? 4 : 0 });
+      const composer = new EffectComposer(this.renderer, target);
+      composer.addPass(new RenderPass(this.scene, this.camera));
+      // Eşik ~1: yalnızca HDR (ışıyan) yüzeyler parlar; güneşli çimen ve gök parlamaz.
+      composer.addPass(new UnrealBloomPass(new Vector2(256, 256), 0.55, 0.45, 1.0));
+      composer.addPass(new OutputPass());
+      this.composer = composer;
+    }
 
     this.resize();
     window.addEventListener('resize', () => this.resize());
   }
+
+  private readonly orbHalo = (x: number, y: number, z: number, size: number, hex: number) =>
+    this.effects.halo(x, y, z, size, hex);
 
   get canvas(): HTMLCanvasElement {
     return this.renderer.domElement;
@@ -116,21 +155,71 @@ export class Renderer3D {
     this.props.setWorld(world);
     this.weaponFx.reset(world);
     this.pulses.reset(world);
+    this.effects.reset(world);
     this.damageNumbers.reset(world);
+  }
+
+  /**
+   * Shader'ları yükleme ekranı arkasında derler (ilk iskelet ya da ilk patlamada takılma olmasın).
+   * Henüz boş olduğu için gizli duran efekt katmanları da geçici olarak görünür yapılır.
+   */
+  async warmUp(): Promise<void> {
+    const hidden: Object3D[] = [];
+    this.scene.traverse((o) => {
+      if (!o.visible) {
+        hidden.push(o);
+        o.visible = true;
+      }
+    });
+    try {
+      // Paralel derleme uzantısı yoksa compileAsync uyarı basar; eşzamanlı derleme aynı işi görür.
+      if (this.renderer.extensions.has('KHR_parallel_shader_compile')) {
+        await this.renderer.compileAsync(this.scene, this.camera);
+      } else {
+        this.renderer.compile(this.scene, this.camera);
+      }
+    } finally {
+      for (const o of hidden) o.visible = false;
+    }
   }
 
   resize(): void {
     const w = window.innerWidth;
     const h = window.innerHeight;
     this.renderer.setSize(w, h, false);
+    if (this.composer) {
+      this.composer.setPixelRatio(this.renderer.getPixelRatio());
+      this.composer.setSize(w, h);
+    }
     this.camera.aspect = w / h;
     // Dar (dikey) ekranlarda görüş alanını biraz aç.
     this.camera.fov = w / h < 1 ? 75 : 60;
     this.camera.updateProjectionMatrix();
   }
 
+  /**
+   * Zayıf GPU koruması: toplam 3 sn boyunca 45 FPS'in altında kalınırsa önce bloom kapanır, sonra
+   * piksel oranı 1'e iner. Hızlı kareler sayacı eritir; tek seferlik takılma (dt en fazla 0.1) yetmez.
+   */
+  private adapt(dt: number): void {
+    if (!this.adaptive || dt <= 0) return;
+    if (dt > 1 / 45) this.slowTime += dt;
+    else this.slowTime = Math.max(0, this.slowTime - dt * 0.5);
+    if (this.slowTime < 3) return;
+    this.slowTime = 0;
+    if (this.composer) {
+      this.composer.dispose();
+      this.composer = null;
+    } else if (this.pixelRatio > 1) {
+      this.pixelRatio = 1;
+      this.renderer.setPixelRatio(1);
+      this.resize();
+    }
+  }
+
   render(world: World, dt: number, cinematic: boolean): void {
     this.time += dt;
+    if (!cinematic) this.adapt(dt);
     const p = world.player;
     if (cinematic) this.rig.orbit(p, world.terrain, dt);
     else this.rig.update(p, world.terrain, dt);
@@ -141,12 +230,16 @@ export class Renderer3D {
 
     this.hero.update(p, world.terrain, dt, this.time, world.gameOver);
     this.worldView.update(world, this.time, dt);
-    this.weaponFx.update(world, this.time, dt);
+    this.effects.begin();
+    this.weaponFx.update(world, this.time, dt, this.orbHalo);
     this.props.update(world, this.time);
     this.scatter.update(this.time, p.x, p.z);
     this.sky.update(this.camera.position, this.time);
     this.pulses.update(world, dt);
+    this.effects.update(world, dt, this.time, this.camera.position);
     this.damageNumbers.update(world, dt);
-    this.renderer.render(this.scene, this.camera);
+    this.renderer.info.reset();
+    if (this.composer) this.composer.render(dt);
+    else this.renderer.render(this.scene, this.camera);
   }
 }

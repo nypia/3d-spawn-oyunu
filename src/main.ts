@@ -14,7 +14,11 @@ function fatal(app: HTMLElement, err: unknown): void {
 }
 
 /** Modeller yüklenirken ilerleme çubuklu açılış ekranı. */
-function loadingScreen(app: HTMLElement): { set: (done: number, total: number) => void; remove: () => void } {
+function loadingScreen(app: HTMLElement): {
+  set: (done: number, total: number) => void;
+  message: (text: string) => void;
+  remove: () => void;
+} {
   const el = document.createElement('div');
   el.className = 'loading';
   el.innerHTML =
@@ -28,6 +32,9 @@ function loadingScreen(app: HTMLElement): { set: (done: number, total: number) =
       if (fill) fill.style.transform = `scaleX(${pct / 100})`;
       if (text) text.textContent = `Yükleniyor… %${pct}`;
     },
+    message(msg) {
+      if (text) text.textContent = msg;
+    },
     remove: () => el.remove(),
   };
 }
@@ -36,8 +43,12 @@ async function boot(app: HTMLElement): Promise<void> {
   const loading = loadingScreen(app);
   try {
     const assets = await loadAssets(loading.set);
+    loading.message('Hazırlanıyor…');
+    const game = new Game(app, assets);
+    // Shader derlemesi açılış ekranının arkasında; en fazla birkaç saniye beklenir.
+    await Promise.race([game.warmUp(), new Promise((r) => setTimeout(r, 5000))]);
     loading.remove();
-    new Game(app, assets).run();
+    game.run();
   } catch (err) {
     loading.remove();
     fatal(app, err);

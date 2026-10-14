@@ -84,6 +84,8 @@ export const PULSE_MAGNET = 0;
 export const PULSE_FREEZE = 1;
 export const PULSE_HOLY = 2;
 export const PULSE_PHOENIX = 3;
+/** collectFx türü: XP taşı (pickup'lar 1 + PICKUP_* olarak yazılır). */
+export const COLLECT_GEM = 0;
 
 /**
  * Tüm oyun durumu ve kuralları. Render'dan tamamen bağımsızdır (three.js import etmez),
@@ -124,6 +126,8 @@ export class World {
   readonly breakFx = new EventRing(32, 4);
   /** Yayılan halka (mıknatıs, donma, kutsal, diriliş): x,y,z,yarıçap,tür (PULSE_*) */
   readonly pulseFx = new EventRing(16, 5);
+  /** Toplama (ışıltı): x,y,z,tür (COLLECT_GEM ya da 1+PICKUP_*),değer */
+  readonly collectFx = new EventRing(64, 5);
   readonly blasts = new Blasts(48);
 
   enemyCap: number;
@@ -485,6 +489,7 @@ export class World {
       const d2 = dx * dx + dy * dy + dz * dz;
       if (d2 < collect2) {
         g.dead[i] = 1;
+        this.collectFx.push(g.x[i], g.y[i], g.z[i], 1 + g.kind[i], g.value[i]);
         this.collectPickup(g.kind[i], g.value[i]);
         continue;
       }
@@ -1318,6 +1323,7 @@ export class World {
       }
       if (d2 < collect2) {
         g.dead[i] = 1;
+        this.collectFx.push(g.x[i], g.y[i], g.z[i], COLLECT_GEM, g.value[i]);
         this.addXp(g.value[i]);
         continue;
       }

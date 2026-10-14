@@ -9,6 +9,8 @@ export interface QualitySettings {
   enemyCap: number;
   /** Çimen tutamı sayısı. */
   grassCount: number;
+  /** HDR bloom art işlemi (taşlar, büyüler, alevler parlar). */
+  bloom: boolean;
 }
 
 export const QUALITY_HIGH: QualitySettings = {
@@ -19,6 +21,7 @@ export const QUALITY_HIGH: QualitySettings = {
   shadowMapSize: 2048,
   enemyCap: BALANCE.spawn.capDesktop,
   grassCount: 9000,
+  bloom: true,
 };
 
 export const QUALITY_LOW: QualitySettings = {
@@ -29,6 +32,7 @@ export const QUALITY_LOW: QualitySettings = {
   shadowMapSize: 512,
   enemyCap: BALANCE.spawn.capMobile,
   grassCount: 3500,
+  bloom: false,
 };
 
 export function isTouchDevice(): boolean {

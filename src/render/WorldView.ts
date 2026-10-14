@@ -17,16 +17,14 @@ import {
 import { BALANCE } from '../data/balance';
 import { ENEMIES, EXPLODER } from '../data/enemies';
 import { GEM_TIERS, gemTier } from '../data/gems';
-import { CHEST, SHRINE } from '../sim/world/Interactables';
 import { OBSTACLE_TREE } from '../sim/world/Obstacles';
-import { TORCH_FX } from '../sim/world/Torches';
 import type { World } from '../sim/world/World';
 import type { GameAssets } from './assets/loadAssets';
 import { coloredGeometry, NATURE_PALETTE, size } from './assets/staticModels';
 import { BlobShadows } from './BlobShadows';
 import { CulledInstances } from './CulledInstances';
 import { buildEnemyLooks, type EnemyLook } from './crowd/enemyLooks';
-import { arrowGeometry, gemGeometry, puffGeometry } from './shapes';
+import { arrowGeometry, gemGeometry } from './shapes';
 import { createTerrainMesh } from './TerrainView';
 
 const UP = new Vector3(0, 1, 0);
@@ -55,6 +53,24 @@ function instanced(
   m.count = 0;
   m.frustumCulled = false;
   m.castShadow = shadows;
+  return m;
+}
+
+/**
+ * XP taşı: yüzeyli Lambert + kendi renginde (instance rengi) HDR ışıma, bloom'da parlar.
+ */
+function glowingGemMaterial(): MeshLambertMaterial {
+  const m = new MeshLambertMaterial({ color: 0xffffff, flatShading: true });
+  m.onBeforeCompile = (shader) => {
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <emissivemap_fragment>',
+      `#include <emissivemap_fragment>
+      #ifdef USE_COLOR
+        totalEmissiveRadiance += vColor.rgb * 1.1;
+      #endif`,
+    );
+  };
+  m.customProgramCacheKey = () => 'gem-glow';
   return m;
 }
 
@@ -97,16 +113,6 @@ function variant(i: number, n: number): number {
 const CORPSE_LIFE = 1.1;
 const CORPSE_CAP = 64;
 
-interface Puff {
-  x: number;
-  y: number;
-  z: number;
-  t: number;
-  color: number;
-  /** Boy çarpanı (havan patlaması büyük). */
-  size: number;
-}
-
 /**
  * Sim durumunu her karede instanced mesh'lere yansıtır. Tür başına tek draw call.
  * Düşman animasyonları (zıplama, sallanma, kanat çırpma) instance matrisiyle prosedüreldir.
@@ -126,14 +132,10 @@ export class WorldView {
   private readonly blobs: BlobShadows;
   private readonly gems: InstancedMesh;
   private readonly arrows: InstancedMesh;
-  private readonly puffs: InstancedMesh;
   private readonly aura: Group;
   private readonly auraRing: Mesh;
   private readonly auraDisc: Mesh;
-  private readonly puffList: Puff[] = [];
   private deathCursor = 0;
-  private blastCursor = 0;
-  private breakCursor = 0;
 
   constructor(
     enemyCapacity: number,
@@ -160,20 +162,8 @@ export class WorldView {
     this.blobs = new BlobShadows(enemyCapacity + CORPSE_CAP);
     this.root.add(this.blobs.mesh);
 
-    this.gems = instanced(
-      gemGeometry(),
-      new MeshLambertMaterial({ color: 0xffffff, emissive: 0x1b4a7a, flatShading: true }),
-      BALANCE.xp.gemCapacity,
-      false,
-    );
+    this.gems = instanced(gemGeometry(), glowingGemMaterial(), BALANCE.xp.gemCapacity, false);
     this.gems.setColorAt(0, WHITE);
-    this.puffs = instanced(
-      puffGeometry(),
-      new MeshLambertMaterial({ color: 0xffffff, flatShading: true }),
-      256,
-      false,
-    );
-    this.puffs.setColorAt(0, WHITE);
 
     this.aura = new Group();
     this.auraDisc = new Mesh(
@@ -199,7 +189,7 @@ export class WorldView {
       256,
       false,
     );
-    this.root.add(this.gems, this.puffs, this.aura, this.arrows);
+    this.root.add(this.gems, this.aura, this.arrows);
   }
 
   /** Yeni run: araziyi ve statik dekoru yeniden kur. */
@@ -246,11 +236,8 @@ export class WorldView {
       this.root.add(mesh);
       return culled;
     });
-    this.puffList.length = 0;
     this.corpses.length = 0;
     this.deathCursor = world.deathFx.written;
-    this.blastCursor = world.blastFx.written;
-    this.breakCursor = world.breakFx.written;
   }
 
   update(world: World, time: number, dt: number): void {
@@ -258,7 +245,7 @@ export class WorldView {
     this.updateEnemies(world, time, dt);
     this.updateGems(world, time);
     this.updateArrows(world);
-    this.updatePuffs(world, dt);
+    this.updateDeaths(world);
 
     const p = world.player;
     this.aura.visible = world.auraRadius > 0;
@@ -269,7 +256,7 @@ export class WorldView {
       // Cehennem Halesi (evrim) kendi renginde.
       const tint = world.tintOf('aura');
       (this.auraDisc.material as MeshBasicMaterial).color.setHex(tint || 0xff7a2a);
-      (this.auraRing.material as MeshBasicMaterial).color.setHex(tint || 0xffb04a);
+      (this.auraRing.material as MeshBasicMaterial).color.setHex(tint || 0xffb04a).multiplyScalar(2);
       this.auraRing.rotation.y = time * 0.8;
     }
   }
@@ -387,71 +374,15 @@ export class WorldView {
     if (this.gems.instanceColor) this.gems.instanceColor.needsUpdate = true;
   }
 
-  private updatePuffs(world: World, dt: number): void {
+  /** Ölen düşmanlar ceset olur (parçacıklar Effects'te). */
+  private updateDeaths(world: World): void {
     this.deathCursor = world.deathFx.drain(this.deathCursor, (d, o) => {
       const type = d[o + 3];
-      if (this.looks[type]) {
-        if (this.corpses.length >= CORPSE_CAP) this.corpses.shift();
-        const p = world.player;
-        const yaw = ENEMIES[type].behavior === 'ranged' ? Math.atan2(p.x - d[o], p.z - d[o + 2]) : d[o + 4];
-        this.corpses.push({ type, x: d[o], y: d[o + 1], z: d[o + 2], yaw, scale: d[o + 5], t: 0 });
-        return;
-      }
-      if (this.puffList.length >= 256) this.puffList.shift();
-      this.puffList.push({
-        x: d[o],
-        y: d[o + 1] + 0.5,
-        z: d[o + 2],
-        t: 0,
-        color: ENEMIES[d[o + 3]]?.color ?? 0xffffff,
-        size: 1,
-      });
+      if (!this.looks[type]) return;
+      if (this.corpses.length >= CORPSE_CAP) this.corpses.shift();
+      const p = world.player;
+      const yaw = ENEMIES[type].behavior === 'ranged' ? Math.atan2(p.x - d[o], p.z - d[o + 2]) : d[o + 4];
+      this.corpses.push({ type, x: d[o], y: d[o + 1], z: d[o + 2], yaw, scale: d[o + 5], t: 0 });
     });
-    this.blastCursor = world.blastFx.drain(this.blastCursor, (d, o) => {
-      if (this.puffList.length >= 256) this.puffList.shift();
-      this.puffList.push({
-        x: d[o],
-        y: d[o + 1] + 0.4,
-        z: d[o + 2],
-        t: 0,
-        color: 0xff8a3d,
-        // Büyük patlamalarda puf ekranı kapatmasın; yarıçapı yayılan halka gösterir.
-        size: Math.min(3, d[o + 3] * 0.9),
-      });
-    });
-    this.breakCursor = world.breakFx.drain(this.breakCursor, (d, o) => {
-      if (this.puffList.length >= 256) this.puffList.shift();
-      const kind = d[o + 3];
-      this.puffList.push({
-        x: d[o],
-        y: d[o + 1] + 0.5,
-        z: d[o + 2],
-        t: 0,
-        color:
-          kind === CHEST ? 0xffd54a : kind === SHRINE ? 0x7fe3ff : kind === TORCH_FX ? 0xff8a2a : 0xc8743f,
-        size: kind === CHEST ? 1.6 : kind === SHRINE ? 2.6 : kind === TORCH_FX ? 1.3 : 0.9,
-      });
-    });
-    let k = 0;
-    for (let i = this.puffList.length - 1; i >= 0; i--) {
-      const p = this.puffList[i];
-      p.t += dt;
-      if (p.t > 0.4) {
-        this.puffList.splice(i, 1);
-        continue;
-      }
-      const s = p.t < 0.15 ? 0.5 + (p.t / 0.15) * 0.9 : 1.4 * (1 - (p.t - 0.15) / 0.25);
-      pos.set(p.x, p.y + p.t * 1.5, p.z);
-      quat.identity();
-      scl.setScalar(Math.max(0.01, s * p.size));
-      m4.compose(pos, quat, scl);
-      this.puffs.setMatrixAt(k, m4);
-      col.setHex(p.color);
-      this.puffs.setColorAt(k, col);
-      k++;
-    }
-    this.puffs.count = k;
-    this.puffs.instanceMatrix.needsUpdate = true;
-    if (this.puffs.instanceColor) this.puffs.instanceColor.needsUpdate = true;
   }
 }

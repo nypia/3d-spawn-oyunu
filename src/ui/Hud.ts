@@ -21,6 +21,9 @@ export class Hud {
   private readonly hint = h('div.hud-hint');
   /** Tespih alınınca tüm ekranı kaplayan beyaz flaş. */
   private readonly flash = h('div.screen-flash');
+  /** Hasar alınca ve can azken kırmızı kenar. */
+  private readonly hurt = h('div.hurt-vignette');
+  private lastHurt = -1;
   private lastFlash = -1;
   /** Kısa süreli duyuru (Anka Tüyü dirilişi vb.). */
   private readonly toast = h('div.hud-toast', { 'data-testid': 'toast' });
@@ -31,6 +34,8 @@ export class Hud {
     this.el = h(
       'div.hud',
       {},
+      h('div.vignette'),
+      this.hurt,
       this.flash,
       h('div.xp-bar', {}, this.xpFill, this.level),
       this.timer,
@@ -59,6 +64,14 @@ export class Hud {
     this.setText('kills', this.kills, String(world.kills));
     this.setText('gold', this.gold, String(Math.floor(world.gold)));
     this.setText('hp', this.hpText, `${Math.ceil(p.hp)} / ${Math.round(p.maxHp)}`);
+
+    // Hasar anında parlayan, can %30'un altındayken nabız gibi atan kırmızı kenar.
+    const low = p.hp > 0 && p.hp / p.maxHp < 0.3 ? 0.35 + Math.sin(performance.now() / 180) * 0.15 : 0;
+    const hurt = Math.round(Math.max(low, (p.hurtTimer / 0.25) * 0.9) * 50) / 50;
+    if (hurt !== this.lastHurt) {
+      this.lastHurt = hurt;
+      this.hurt.style.opacity = String(hurt);
+    }
 
     // Tespih: beyaz flaş (CSS animasyonu yeniden başlatılır).
     if (world.holyAt >= 0 && world.holyAt !== this.lastFlash) {

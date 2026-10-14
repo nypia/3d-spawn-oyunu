@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { gemTier } from '../../src/data/gems';
 import { GemPool } from '../../src/sim/pickups/GemPool';
-import { World } from '../../src/sim/world/World';
+import { NO_INPUT } from '../../src/sim/player/Player';
+import { COLLECT_GEM, World } from '../../src/sim/world/World';
 
 describe('XP taşları', () => {
   it('kademeler: mavi ≤2, yeşil ≤9, kırmızı ≤49, mor 50+', () => {
@@ -62,5 +63,22 @@ describe('XP taşları', () => {
     w.time = 600;
     const late = w.spawnEnemy(0, 16, 10);
     expect(w.enemies.xp[late]).toBeGreaterThan(w.enemies.xp[slime] * 1.5);
+  });
+
+  it('toplanan taş render için ışıltı olayı yazar', () => {
+    const w = new World({ seed: 3, enemyCap: 0 });
+    const p = w.player;
+    w.gems.add(p.x + 0.3, p.y + 0.8, p.z, 7, p.x, p.z);
+    const before = w.collectFx.written;
+    for (let k = 0; k < 10; k++) w.step(NO_INPUT, 1 / 60);
+    expect(w.collectFx.written).toBe(before + 1);
+    let kind = -1;
+    let value = 0;
+    w.collectFx.drain(before, (d, o) => {
+      kind = d[o + 3];
+      value = d[o + 4];
+    });
+    expect(kind).toBe(COLLECT_GEM);
+    expect(value).toBe(7);
   });
 });
