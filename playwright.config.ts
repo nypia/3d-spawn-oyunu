@@ -3,6 +3,8 @@ import { defineConfig, devices } from '@playwright/test';
 export default defineConfig({
   testDir: 'tests/e2e',
   timeout: 60_000,
+  // Açılışta modeller yükleniyor; yazılımsal GPU'da kareler de yavaş.
+  expect: { timeout: 15_000 },
   // Yazılımsal GPU'da (CI, bulut) paralel testler birbirini yavaşlatıyor.
   workers: 1,
   use: {

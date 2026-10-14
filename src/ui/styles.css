@@ -734,6 +734,48 @@ kbd {
   pointer-events: none;
 }
 
+.loading {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 18px;
+  background: radial-gradient(ellipse at center, #2a3f6b, #0d1428);
+  color: var(--text);
+}
+
+.loading-title {
+  font-size: clamp(48px, 12vw, 84px);
+  font-weight: 900;
+  letter-spacing: 6px;
+  color: var(--accent);
+  text-shadow:
+    0 4px 0 #b07d10,
+    0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
+.loading-bar {
+  width: min(320px, 70vw);
+  height: 12px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+
+.loading-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #ffcc4d, #ff8a3d);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.15s;
+}
+
+.loading-text {
+  color: var(--muted);
+  font-size: 14px;
+}
+
 .fatal {
   display: grid;
   place-items: center;

@@ -49,11 +49,14 @@ test('telefonda joystick, zıplama ve kartlar dokunmatikle çalışır', async (
   const start = await snap(page);
   await finger(page, 'pointerdown', 7, 160, 220);
   await finger(page, 'pointermove', 7, 160, 150);
-  await page.waitForTimeout(1500);
+  // Yazılımsal GPU'da kare hızı düşük olabilir: sabit bekleme yerine yer değiştirmeyi yokla.
+  const distance = async () => {
+    const s = await snap(page);
+    return Math.hypot(s.x - start.x, s.z - start.z);
+  };
+  await expect.poll(distance, { timeout: 20_000 }).toBeGreaterThan(3);
   await page.screenshot({ path: testInfo.outputPath('touch-run.png') });
   await finger(page, 'pointerup', 7, 160, 150);
-  const moved = await snap(page);
-  expect(Math.hypot(moved.x - start.x, moved.z - start.z)).toBeGreaterThan(3);
 
   // ZIPLA butonu → havada.
   await page.getByTestId('touch-jump').dispatchEvent('pointerdown', { pointerType: 'touch', pointerId: 9 });

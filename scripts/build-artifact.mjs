@@ -23,7 +23,11 @@ if (!jsRel) throw new Error('Derlenen index.html içinde modül script bulunamad
 
 let js = readFileSync(join(outDir, jsRel), 'utf8');
 js = js.replace(/(\bfrom\s*|\bimport\s*\(\s*|\bimport\s*)(["'])three\2/g, `$1$2${threeUrl}$2`);
-if (/(\bfrom\s*|\bimport\s*\(?\s*)(["'])three(\/[^"']*)?\2/.test(js)) {
+// Yalnızca gerçek import/export satırlarına bak: three eklentilerinin JSDoc yorumlarında da
+// `from 'three/addons/...'` geçiyor.
+const bareStatic = /^\s*(?:import|export)\b[^\n]*?\bfrom\s*(["'])three(\/[^"']*)?\1/m;
+const bareDynamic = /\bimport\s*\(\s*(["'])three(\/[^"']*)?\1\s*\)/;
+if (bareStatic.test(js) || bareDynamic.test(js)) {
   throw new Error('Bundle içinde hâlâ çıplak "three" importu var');
 }
 js = js.replace(/<\/script/gi, '<\\/script');
@@ -38,6 +42,8 @@ ${css}
 ${js}
 </script>
 `;
+const MAX_BYTES = 15 * 1024 * 1024;
+if (Buffer.byteLength(page) > MAX_BYTES) throw new Error('spawn.html Artifact sınırına çok yakın (15 MB)');
 writeFileSync('dist-artifact/spawn.html', page);
 writeFileSync(
   'dist-artifact/preview.html',

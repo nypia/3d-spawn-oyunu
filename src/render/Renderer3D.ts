@@ -11,6 +11,7 @@ import {
   WebGLRenderer,
 } from 'three';
 import type { World } from '../sim/world/World';
+import type { GameAssets } from './assets/loadAssets';
 import { CameraRig } from './CameraRig';
 import { DamageNumbers } from './DamageNumbers';
 import { PlayerView } from './PlayerView';
@@ -37,7 +38,12 @@ export class Renderer3D {
   readonly damageNumbers = new DamageNumbers();
   private time = 0;
 
-  constructor(container: HTMLElement, quality: QualitySettings, enemyCapacity: number) {
+  constructor(
+    container: HTMLElement,
+    quality: QualitySettings,
+    enemyCapacity: number,
+    readonly assets: GameAssets,
+  ) {
     this.renderer = new WebGLRenderer({ antialias: quality.antialias, powerPreference: 'high-performance' });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, quality.maxPixelRatio));
     this.renderer.outputColorSpace = SRGBColorSpace;

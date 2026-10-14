@@ -4,6 +4,7 @@ import { ITEMS } from '../data/items';
 import { SHRINE_BONUSES } from '../data/shrines';
 import { TOME_INDEX, TOMES } from '../data/tomes';
 import { DebugOverlay } from '../debug/DebugOverlay';
+import type { GameAssets } from '../render/assets/loadAssets';
 import { detectQuality, isTouchDevice, type QualitySettings } from '../render/Quality';
 import { Renderer3D } from '../render/Renderer3D';
 import type { PlayerInput } from '../sim/player/Player';
@@ -42,11 +43,11 @@ export class Game {
   private lastHp = 0;
   private last = performance.now();
 
-  constructor(root: HTMLElement) {
+  constructor(root: HTMLElement, assets: GameAssets) {
     this.flags = readFlags(location.search, location.hash);
     this.quality = detectQuality(this.flags.quality);
     const bench = this.flags.bench;
-    this.renderer = new Renderer3D(root, this.quality, Math.max(1200, bench));
+    this.renderer = new Renderer3D(root, this.quality, Math.max(1200, bench), assets);
     this.input = new Input(this.renderer.canvas);
     this.hud = new Hud(root);
     // Katman sırası: canvas < HUD < dokunmatik kontroller < menüler (kartlara dokunulabilsin).

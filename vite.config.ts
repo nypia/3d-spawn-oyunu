@@ -17,7 +17,8 @@ export default defineConfig(({ mode }) => ({
           cssCodeSplit: false,
           rollupOptions: { external: ['three'] },
         }
-      : { target: 'es2022', chunkSizeWarningLimit: 1500 },
+      : // Modeller data URI olarak JS'e gömülü (~2 MB): uyarı eşiği buna göre.
+        { target: 'es2022', chunkSizeWarningLimit: 4000 },
   test: {
     include: ['tests/unit/**/*.test.ts', 'tests/sim/**/*.test.ts'],
     environment: 'node',

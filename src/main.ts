@@ -1,15 +1,47 @@
 import { Game } from './core/Game';
+import { loadAssets } from './render/assets/loadAssets';
 import './ui/styles.css';
 
 const root = document.getElementById('app');
 if (!root) throw new Error('#app bulunamadı');
 
-try {
-  new Game(root).run();
-} catch (err) {
+function fatal(app: HTMLElement, err: unknown): void {
   console.error(err);
-  root.innerHTML =
+  app.innerHTML =
     '<div class="fatal">Oyun başlatılamadı. Tarayıcınız WebGL desteklemiyor olabilir.<br><small></small></div>';
-  const small = root.querySelector('small');
+  const small = app.querySelector('small');
   if (small) small.textContent = String(err);
 }
+
+/** Modeller yüklenirken ilerleme çubuklu açılış ekranı. */
+function loadingScreen(app: HTMLElement): { set: (done: number, total: number) => void; remove: () => void } {
+  const el = document.createElement('div');
+  el.className = 'loading';
+  el.innerHTML =
+    '<div class="loading-title">SPAWN</div><div class="loading-bar"><div class="loading-fill"></div></div><div class="loading-text">Yükleniyor…</div>';
+  app.append(el);
+  const fill = el.querySelector<HTMLElement>('.loading-fill');
+  const text = el.querySelector<HTMLElement>('.loading-text');
+  return {
+    set(done, total) {
+      const pct = Math.round((done / Math.max(1, total)) * 100);
+      if (fill) fill.style.transform = `scaleX(${pct / 100})`;
+      if (text) text.textContent = `Yükleniyor… %${pct}`;
+    },
+    remove: () => el.remove(),
+  };
+}
+
+async function boot(app: HTMLElement): Promise<void> {
+  const loading = loadingScreen(app);
+  try {
+    const assets = await loadAssets(loading.set);
+    loading.remove();
+    new Game(app, assets).run();
+  } catch (err) {
+    loading.remove();
+    fatal(app, err);
+  }
+}
+
+void boot(root);
