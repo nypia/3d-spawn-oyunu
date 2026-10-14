@@ -4,7 +4,7 @@ import {
   DirectionalLight,
   Fog,
   HemisphereLight,
-  PCFSoftShadowMap,
+  PCFShadowMap,
   PerspectiveCamera,
   Scene,
   SRGBColorSpace,
@@ -50,7 +50,7 @@ export class Renderer3D {
     this.renderer.toneMapping = ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.05;
     this.renderer.shadowMap.enabled = quality.shadows;
-    this.renderer.shadowMap.type = PCFSoftShadowMap;
+    this.renderer.shadowMap.type = PCFShadowMap;
     container.appendChild(this.renderer.domElement);
 
     this.camera = new PerspectiveCamera(60, 1, 0.1, 400);
@@ -75,7 +75,7 @@ export class Renderer3D {
     this.sun.shadow.normalBias = 0.03;
     this.scene.add(this.sun, this.sun.target);
 
-    this.worldView = new WorldView(enemyCapacity, quality.shadows);
+    this.worldView = new WorldView(enemyCapacity, quality.shadows, assets);
     this.props = new PropsView(quality.shadows);
     this.scene.add(
       this.worldView.root,

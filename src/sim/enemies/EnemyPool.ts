@@ -36,6 +36,8 @@ export class EnemyPool {
   readonly timer: Float32Array;
   /** Donma süresi (Buz Kristali, Saat): >0 iken hareket, saldırı ve temas hasarı yok. */
   readonly frozen: Float32Array;
+  /** Kendi isteğiyle yürüdüğü toplam mesafe (m): render yürüme döngüsünü buna göre ilerletir. */
+  readonly travel: Float32Array;
   readonly type: Uint8Array;
   readonly elite: Uint8Array;
   readonly dead: Uint8Array;
@@ -65,6 +67,7 @@ export class EnemyPool {
     this.scale = f();
     this.timer = f();
     this.frozen = f();
+    this.travel = f();
     this.type = new Uint8Array(capacity);
     this.elite = new Uint8Array(capacity);
     this.dead = new Uint8Array(capacity);
@@ -87,6 +90,7 @@ export class EnemyPool {
     this.scale[i] = 1;
     this.timer[i] = 0;
     this.frozen[i] = 0;
+    this.travel[i] = 0;
     this.elite[i] = 0;
     return i;
   }
@@ -121,6 +125,7 @@ export class EnemyPool {
     this.scale[i] = this.scale[last];
     this.timer[i] = this.timer[last];
     this.frozen[i] = this.frozen[last];
+    this.travel[i] = this.travel[last];
     this.type[i] = this.type[last];
     this.elite[i] = this.elite[last];
     this.dead[i] = this.dead[last];

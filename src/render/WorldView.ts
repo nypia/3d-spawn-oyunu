@@ -21,8 +21,10 @@ import { CHEST, SHRINE } from '../sim/world/Interactables';
 import { OBSTACLE_ROCK, OBSTACLE_TREE } from '../sim/world/Obstacles';
 import { TORCH_FX } from '../sim/world/Torches';
 import type { World } from '../sim/world/World';
+import type { GameAssets } from './assets/loadAssets';
+import { BlobShadows } from './BlobShadows';
+import { buildEnemyLooks, type EnemyLook } from './crowd/enemyLooks';
 import {
-  archerGeometry,
   arrowGeometry,
   batGeometry,
   bombGeometry,
@@ -30,7 +32,6 @@ import {
   golemGeometry,
   puffGeometry,
   rockGeometry,
-  skeletonGeometry,
   slimeGeometry,
   treeGeometry,
 } from './shapes';
@@ -68,6 +69,20 @@ function instanced(
   return m;
 }
 
+/** Ölen modelli düşman: kısa süre `die` klibini oynar, sonra yere gömülür. */
+interface Corpse {
+  type: number;
+  x: number;
+  y: number;
+  z: number;
+  yaw: number;
+  scale: number;
+  t: number;
+}
+
+const CORPSE_LIFE = 1.1;
+const CORPSE_CAP = 64;
+
 interface Puff {
   x: number;
   y: number;
@@ -87,7 +102,13 @@ export class WorldView {
   private terrain: Mesh | null = null;
   private trees: InstancedMesh | null = null;
   private rocks: InstancedMesh | null = null;
-  private readonly enemyMeshes: InstancedMesh[];
+  /** Prosedürel şekilli türler (modeli olanlar için null). */
+  private readonly enemyMeshes: (InstancedMesh | null)[];
+  /** Modelli, animasyonlu türler (CrowdMesh). */
+  private readonly looks: (EnemyLook | null)[];
+  private readonly lookCounts: number[];
+  private readonly corpses: Corpse[] = [];
+  private readonly blobs: BlobShadows;
   private readonly gems: InstancedMesh;
   private readonly arrows: InstancedMesh;
   private readonly puffs: InstancedMesh;
@@ -102,23 +123,34 @@ export class WorldView {
   constructor(
     enemyCapacity: number,
     private readonly shadows: boolean,
+    assets: GameAssets,
   ) {
+    this.looks = buildEnemyLooks(assets, enemyCapacity + CORPSE_CAP);
+    this.lookCounts = this.looks.map(() => 0);
+    for (const look of this.looks) {
+      if (!look) continue;
+      look.crowd.setColorAt(0, WHITE);
+      this.root.add(look.crowd);
+    }
     const geoByShape = {
       blob: slimeGeometry,
-      capsule: skeletonGeometry,
       bat: batGeometry,
       golem: golemGeometry,
-      archer: archerGeometry,
       bomb: bombGeometry,
     };
-    this.enemyMeshes = ENEMIES.map((def) => {
+    this.enemyMeshes = ENEMIES.map((def, t) => {
+      if (this.looks[t]) return null;
+      const shape = def.shape as keyof typeof geoByShape;
       const mat = new MeshLambertMaterial({ color: def.color, vertexColors: true, flatShading: true });
-      const mesh = instanced(geoByShape[def.shape](), mat, enemyCapacity, shadows);
+      // Düşmanlar gerçek gölge atmaz (kalabalıkta pahalı); altlarında blob gölge var.
+      const mesh = instanced(geoByShape[shape](), mat, enemyCapacity, false);
       mesh.setColorAt(0, WHITE);
       mesh.name = `enemy:${def.id}`;
       this.root.add(mesh);
       return mesh;
     });
+    this.blobs = new BlobShadows(enemyCapacity + CORPSE_CAP);
+    this.root.add(this.blobs.mesh);
 
     this.gems = instanced(
       gemGeometry(),
@@ -200,13 +232,14 @@ export class WorldView {
       this.root.add(m);
     }
     this.puffList.length = 0;
+    this.corpses.length = 0;
     this.deathCursor = world.deathFx.written;
     this.blastCursor = world.blastFx.written;
     this.breakCursor = world.breakFx.written;
   }
 
   update(world: World, time: number, dt: number): void {
-    this.updateEnemies(world, time);
+    this.updateEnemies(world, time, dt);
     this.updateGems(world, time);
     this.updateArrows(world);
     this.updatePuffs(world, dt);
@@ -225,16 +258,25 @@ export class WorldView {
     }
   }
 
-  private updateEnemies(world: World, time: number): void {
+  private updateEnemies(world: World, time: number, dt: number): void {
     const e = world.enemies;
     const counts = this.enemyMeshes.map(() => 0);
+    this.lookCounts.fill(0);
+    this.blobs.begin();
     for (let i = 0; i < e.count; i++) {
       if (e.dead[i]) continue;
       const type = e.type[i];
-      const mesh = this.enemyMeshes[type];
       const def = ENEMIES[type];
+      this.blobs.add(world.terrain, e.x[i], e.z[i], def.radius * e.scale[i] * 1.2, e.hover[i]);
       // Donmuş düşmanın animasyonu durur (poz sabit kalır).
       const frozen = e.frozen[i] > 0;
+      const look = this.looks[type];
+      if (look) {
+        this.drawModelEnemy(world, look, i, frozen);
+        continue;
+      }
+      const mesh = this.enemyMeshes[type];
+      if (!mesh) continue;
       const ph = e.phase[i] + (frozen ? 0 : time * (4 + e.speed[i]));
       let y = e.y[i] + e.hover[i];
       let sx = def.scale * e.scale[i];
@@ -299,10 +341,66 @@ export class WorldView {
       );
     }
     this.enemyMeshes.forEach((mesh, t) => {
+      if (!mesh) return;
       mesh.count = counts[t];
       mesh.instanceMatrix.needsUpdate = true;
       if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
     });
+    this.updateCorpses(dt);
+    this.looks.forEach((look, t) => {
+      look?.crowd.commit(this.lookCounts[t]);
+    });
+    this.blobs.end();
+  }
+
+  /** Modelli düşman: konum/yön/boy, renk tonu ve animasyon karesi. */
+  private drawModelEnemy(world: World, look: EnemyLook, i: number, frozen: boolean): void {
+    const e = world.enemies;
+    const type = e.type[i];
+    const def = ENEMIES[type];
+    const k = this.lookCounts[type]++;
+    pos.set(e.x[i], e.y[i] + e.hover[i], e.z[i]);
+    const p = world.player;
+    const yaw =
+      def.behavior === 'ranged' ? Math.atan2(p.x - e.x[i], p.z - e.z[i]) : Math.atan2(e.vx[i], e.vz[i]);
+    quat.setFromAxisAngle(UP, yaw);
+    scl.setScalar(e.scale[i]);
+    m4.compose(pos, quat, scl);
+    const crowd = look.crowd;
+    crowd.setMatrixAt(k, m4);
+    crowd.setColorAt(k, frozen ? ICE_TINT : e.elite[i] ? ELITE_TINT : WHITE);
+    const flash = e.flash[i] > 0 ? 0.9 : frozen ? -1 : 0;
+    // Okçu atıştan hemen önce yayı çeker; diğerleri yürüdükleri yol kadar adım atar.
+    const draw = 0.6;
+    if (look.shoot && !frozen && e.timer[i] >= 0 && e.timer[i] < draw) {
+      crowd.setAnim(k, look.shoot, ((draw - e.timer[i]) / draw) * look.shoot.duration, flash);
+    } else {
+      const cycle = (e.travel[i] + e.phase[i] * look.stride) / look.stride;
+      crowd.setAnim(k, look.walk, cycle * look.walk.duration, flash);
+    }
+  }
+
+  /** Cesetler: canlıların ardından aynı kalabalığa çizilir. */
+  private updateCorpses(dt: number): void {
+    for (let c = this.corpses.length - 1; c >= 0; c--) {
+      const k = this.corpses[c];
+      k.t += dt;
+      if (k.t > CORPSE_LIFE) {
+        this.corpses.splice(c, 1);
+        continue;
+      }
+      const look = this.looks[k.type];
+      if (!look) continue;
+      const slot = this.lookCounts[k.type]++;
+      const sink = Math.max(0, k.t - 0.65) * 1.8;
+      pos.set(k.x, k.y - sink, k.z);
+      quat.setFromAxisAngle(UP, k.yaw);
+      scl.setScalar(k.scale);
+      m4.compose(pos, quat, scl);
+      look.crowd.setMatrixAt(slot, m4);
+      look.crowd.setColorAt(slot, WHITE);
+      look.crowd.setAnim(slot, look.die, k.t * 0.6, 0);
+    }
   }
 
   private updateArrows(world: World): void {
@@ -344,6 +442,14 @@ export class WorldView {
 
   private updatePuffs(world: World, dt: number): void {
     this.deathCursor = world.deathFx.drain(this.deathCursor, (d, o) => {
+      const type = d[o + 3];
+      if (this.looks[type]) {
+        if (this.corpses.length >= CORPSE_CAP) this.corpses.shift();
+        const p = world.player;
+        const yaw = ENEMIES[type].behavior === 'ranged' ? Math.atan2(p.x - d[o], p.z - d[o + 2]) : d[o + 4];
+        this.corpses.push({ type, x: d[o], y: d[o + 1], z: d[o + 2], yaw, scale: d[o + 5], t: 0 });
+        return;
+      }
       if (this.puffList.length >= 256) this.puffList.shift();
       this.puffList.push({
         x: d[o],

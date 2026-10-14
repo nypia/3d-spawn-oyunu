@@ -111,8 +111,8 @@ export class World {
   readonly weapons: WeaponInstance[] = [];
   readonly tomeLevels: number[] = TOMES.map(() => 0);
 
-  /** Render/ses için olay akışları. death: x,y,z,type · hit: x,y,z,hasar,kritik */
-  readonly deathFx = new EventRing(256, 4);
+  /** Render/ses için olay akışları. death: x,y,z,type,yön,boy · hit: x,y,z,hasar,kritik */
+  readonly deathFx = new EventRing(256, 6);
   readonly hitFx = new EventRing(512, 5);
   /** Kılıç savuruşu: x,y,z,açı,menzil */
   readonly arcFx = new EventRing(32, 5);
@@ -756,6 +756,7 @@ export class World {
       if (!frozen) {
         e.vx[i] = vx;
         e.vz[i] = vz;
+        e.travel[i] += sp * dt;
       }
 
       // Ayrışma (uzaktakiler için 3 tick'te bir — LOD).
@@ -890,7 +891,8 @@ export class World {
       // Patlamayı kuyruğa al (zincirleme patlamalar özyineleme yapmasın).
       this.addBlast(x, z, ITEM_FX.skullRadius, ITEM_FX.skullDamage, 3, 0.05);
     }
-    this.deathFx.push(e.x[i], e.y[i] + e.hover[i], e.z[i], e.type[i]);
+    const yaw = Math.atan2(e.vx[i], e.vz[i]);
+    this.deathFx.push(e.x[i], e.y[i] + e.hover[i], e.z[i], e.type[i], yaw, e.scale[i]);
   }
 
   /** Patlayan düşmanın fitili bitti: oyuncu yakındaysa hasar alır. XP ve kill sayılmaz. */
