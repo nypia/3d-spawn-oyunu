@@ -48,6 +48,8 @@ const FLASH = new Color(3, 3, 3);
 /** Elitler altın tonda parlar. */
 const ELITE_TINT = new Color(1.7, 1.35, 0.55);
 const FUSE_FLASH = new Color(3, 2.2, 1.2);
+/** Donmuş düşman: buz mavisi. */
+const ICE_TINT = new Color(0.55, 1.15, 1.9);
 const ARROW_FWD = new Vector3(0, 0, 1);
 const arrowDir = new Vector3();
 
@@ -225,7 +227,9 @@ export class WorldView {
       const type = e.type[i];
       const mesh = this.enemyMeshes[type];
       const def = ENEMIES[type];
-      const ph = e.phase[i] + time * (4 + e.speed[i]);
+      // Donmuş düşmanın animasyonu durur (poz sabit kalır).
+      const frozen = e.frozen[i] > 0;
+      const ph = e.phase[i] + (frozen ? 0 : time * (4 + e.speed[i]));
       let y = e.y[i] + e.hover[i];
       let sx = def.scale * e.scale[i];
       let sy = def.scale * e.scale[i];
@@ -282,8 +286,11 @@ export class WorldView {
       m4.compose(pos, quat, scl);
       const k = counts[type]++;
       mesh.setMatrixAt(k, m4);
-      const blink = fusing && Math.floor(time * 12) % 2 === 0;
-      mesh.setColorAt(k, e.flash[i] > 0 ? FLASH : blink ? FUSE_FLASH : e.elite[i] ? ELITE_TINT : WHITE);
+      const blink = fusing && !frozen && Math.floor(time * 12) % 2 === 0;
+      mesh.setColorAt(
+        k,
+        e.flash[i] > 0 ? FLASH : frozen ? ICE_TINT : blink ? FUSE_FLASH : e.elite[i] ? ELITE_TINT : WHITE,
+      );
     }
     this.enemyMeshes.forEach((mesh, t) => {
       mesh.count = counts[t];
@@ -349,7 +356,8 @@ export class WorldView {
         z: d[o + 2],
         t: 0,
         color: 0xff8a3d,
-        size: d[o + 3] * 0.9,
+        // Büyük patlamalarda puf ekranı kapatmasın; yarıçapı yayılan halka gösterir.
+        size: Math.min(3, d[o + 3] * 0.9),
       });
     });
     this.breakCursor = world.breakFx.drain(this.breakCursor, (d, o) => {

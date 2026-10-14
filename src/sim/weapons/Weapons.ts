@@ -1,3 +1,4 @@
+import { ITEM_FX, ITEM_INDEX } from '../../data/items';
 import type { WeaponDef, WeaponLevelDelta, WeaponStats } from '../../data/weapons';
 import { PF_GROUND_FOLLOW, PF_RETURNS, PROJ_AXE, PROJ_BOLT, PROJ_PELLET } from '../combat/ProjectilePool';
 import type { World } from '../world/World';
@@ -18,10 +19,12 @@ export interface WeaponInstance {
   timer: number;
   /** Davranışa özel faz (yörünge açısı vb.). */
   phase: number;
+  /** Yankı Yüzüğü: >0 ise bu kadar sn sonra silah bir kez daha ateşlenir. */
+  echo: number;
 }
 
 export function createWeapon(def: WeaponDef): WeaponInstance {
-  return { def, level: 1, applied: [], stats: computeWeaponStats(def, []), timer: 0.3, phase: 0 };
+  return { def, level: 1, applied: [], stats: computeWeaponStats(def, []), timer: 0.3, phase: 0, echo: 0 };
 }
 
 export function computeWeaponStats(def: WeaponDef, applied: readonly AppliedDelta[]): WeaponStats {
@@ -68,11 +71,19 @@ export function orbitRadius(world: World, w: WeaponInstance): number {
 
 export function updateWeapon(world: World, w: WeaponInstance, dt: number): void {
   if (w.def.behavior === 'orbit') w.phase += w.stats.speed * dt;
+  if (w.echo > 0) {
+    w.echo -= dt;
+    if (w.echo <= 0) fire(world, w);
+  }
   w.timer -= dt;
   if (w.timer > 0) return;
   const fired = fire(world, w);
   // Hedef yoksa beklemeye girme: düşman gelince hemen ateşle.
   w.timer = fired ? w.stats.cooldown / Math.max(0.1, world.stats.get('attackSpeed')) : 0;
+  const rings = world.itemCounts[ITEM_INDEX.echo];
+  if (fired && rings > 0 && world.rng.chance(Math.min(ITEM_FX.echoMaxChance, ITEM_FX.echoChance * rings))) {
+    w.echo = ITEM_FX.echoDelay;
+  }
 }
 
 function fire(world: World, w: WeaponInstance): boolean {

@@ -60,6 +60,12 @@ export interface ProjectileSpawn {
 const PB = BALANCE.player;
 const XB = BALANCE.xp;
 
+/** pulseFx türleri: yayılan halka efektinin rengi. */
+export const PULSE_MAGNET = 0;
+export const PULSE_FREEZE = 1;
+export const PULSE_HOLY = 2;
+export const PULSE_PHOENIX = 3;
+
 /**
  * Tüm oyun durumu ve kuralları. Render'dan tamamen bağımsızdır (three.js import etmez),
  * bu yüzden Node'da headless olarak çalıştırılıp test edilebilir.
@@ -96,6 +102,8 @@ export class World {
   readonly blastFx = new EventRing(64, 4);
   /** Kırılma/açılma: x,y,z,tür (Interactables türü) */
   readonly breakFx = new EventRing(32, 4);
+  /** Yayılan halka (mıknatıs, donma, kutsal, diriliş): x,y,z,yarıçap,tür (PULSE_*) */
+  readonly pulseFx = new EventRing(16, 5);
   readonly blasts = new Blasts(48);
 
   enemyCap: number;
@@ -121,6 +129,10 @@ export class World {
   reward: Reward | null = null;
   /** Kalkan Muskası bekleme süresi. */
   shieldCooldown = 0;
+  /** Mıknatıs Taşı'nın bir sonraki çekişine kalan süre. */
+  lodestoneTimer = 0;
+  /** Son Anka Tüyü dirilişinin zamanı (HUD duyurusu için; −1 = hiç). */
+  revivedAt = -1;
   gold = 0;
 
   /** Run başına seviye atlama hakları. */
@@ -201,11 +213,13 @@ export class World {
     this.gems.removeDead();
     this.pickups.removeDead();
     this.shieldCooldown = Math.max(0, this.shieldCooldown - dt);
+    this.updateLodestone(dt);
 
     p.maxHp = this.stats.get('maxHp');
     p.hp = Math.min(p.maxHp, p.hp + this.stats.get('regen') * dt);
     if (p.hp <= 0) {
       if (this.godMode) p.hp = p.maxHp;
+      else if (this.itemCounts[ITEM_INDEX.phoenix] > 0) this.revive();
       else {
         p.hp = 0;
         this.gameOver = true;
@@ -342,10 +356,43 @@ export class World {
     }
   }
 
+  /** Mıknatıs Taşı: belirli aralıklarla yakındaki XP ve altını çeker. */
+  private updateLodestone(dt: number): void {
+    const n = this.itemCounts[ITEM_INDEX.lodestone];
+    if (n <= 0) return;
+    this.lodestoneTimer -= dt;
+    if (this.lodestoneTimer > 0) return;
+    this.lodestoneTimer = Math.max(
+      ITEM_FX.lodestoneMin,
+      ITEM_FX.lodestoneCooldown - ITEM_FX.lodestonePerCopy * (n - 1),
+    );
+    const p = this.player;
+    this.attract(ITEM_FX.lodestoneRadius);
+    this.pulseFx.push(p.x, p.y, p.z, ITEM_FX.lodestoneRadius, PULSE_MAGNET);
+  }
+
+  /** Anka Tüyü: bir kopya harcanır, yarım canla dirilir, kısa dokunulmazlık ve alev patlaması. */
+  private revive(): void {
+    const p = this.player;
+    this.itemCounts[ITEM_INDEX.phoenix]--;
+    p.hp = p.maxHp * ITEM_FX.phoenixHp;
+    p.invuln = ITEM_FX.phoenixInvuln;
+    this.revivedAt = this.time;
+    this.addBlast(p.x, p.z, ITEM_FX.phoenixRadius, ITEM_FX.phoenixDamage, 12, 0);
+    this.pulseFx.push(p.x, p.y, p.z, ITEM_FX.phoenixRadius * 1.6, PULSE_PHOENIX);
+  }
+
+  /** Düşmanı `seconds` boyunca dondurur (süre uzatılmaz, en uzunu geçerli). */
+  freezeEnemy(i: number, seconds: number): void {
+    const e = this.enemies;
+    if (!e.dead[i]) e.frozen[i] = Math.max(e.frozen[i], seconds);
+  }
+
   /**
-   * Oyuncuya hasar: Kalkan Muskası hazırsa vuruşu yutar. Verilen gerçek hasarı döner.
+   * Oyuncuya hasar: dokunulmazsa ya da Kalkan Muskası hazırsa vuruşu yutar. Verilen gerçek hasarı döner.
    */
   hurtPlayer(amount: number): number {
+    if (this.player.invuln > 0) return 0;
     const amulets = this.itemCounts[ITEM_INDEX.amulet];
     if (amulets > 0 && this.shieldCooldown <= 0) {
       this.shieldCooldown = Math.max(
@@ -501,11 +548,16 @@ export class World {
 
   addXp(amount: number): void {
     this.xp += amount * this.stats.get('xpGain');
+    const bandages = this.itemCounts[ITEM_INDEX.bandage];
     while (this.xp >= this.xpNext) {
       this.xp -= this.xpNext;
       this.level++;
       this.xpNext = xpToNext(this.level);
       this.pendingLevelUps++;
+      if (bandages > 0) {
+        const p = this.player;
+        p.hp = Math.min(p.maxHp, p.hp + ITEM_FX.bandageHeal * bandages);
+      }
     }
   }
 
@@ -548,6 +600,8 @@ export class World {
       if (e.dead[i]) continue;
       e.contactCd[i] -= dt;
       if (e.flash[i] > 0) e.flash[i] -= dt;
+      const frozen = e.frozen[i] > 0;
+      if (frozen) e.frozen[i] = Math.max(0, e.frozen[i] - dt);
 
       const x = e.x[i];
       const z = e.z[i];
@@ -558,47 +612,53 @@ export class World {
       let ux = dx / dist;
       let uz = dz / dist;
 
-      switch (ENEMIES[e.type[i]].behavior) {
-        case 'ranged': {
-          // Mesafe koru: uzaksa yaklaş, yakınsa geri çekil, aradaysa yana kay.
-          if (dist < ARCHER.minRange) {
-            ux = -ux;
-            uz = -uz;
-            sp *= 0.8;
-          } else if (dist <= ARCHER.maxRange) {
-            const side = e.uid[i] & 1 ? 1 : -1;
-            const tx = uz * side;
-            uz = -ux * side;
-            ux = tx;
-            sp *= 0.35;
-          }
-          e.timer[i] -= dt;
-          if (e.timer[i] <= 0 && dist < ARCHER.fireRange) {
-            this.fireEnemyShot(i);
-            e.timer[i] = ARCHER.cooldown * this.rng.range(0.85, 1.15);
-          }
-          break;
-        }
-        case 'exploder': {
-          if (e.timer[i] >= 0) {
-            e.timer[i] -= dt;
-            sp *= 0.25;
-            if (e.timer[i] <= 0) {
-              this.explode(i);
-              continue;
+      // Donmuş düşman yerinde durur, ateş etmez, fitili ilerlemez.
+      if (frozen) sp = 0;
+      else
+        switch (ENEMIES[e.type[i]].behavior) {
+          case 'ranged': {
+            // Mesafe koru: uzaksa yaklaş, yakınsa geri çekil, aradaysa yana kay.
+            if (dist < ARCHER.minRange) {
+              ux = -ux;
+              uz = -uz;
+              sp *= 0.8;
+            } else if (dist <= ARCHER.maxRange) {
+              const side = e.uid[i] & 1 ? 1 : -1;
+              const tx = uz * side;
+              uz = -ux * side;
+              ux = tx;
+              sp *= 0.35;
             }
-          } else if (dist < EXPLODER.triggerRange) {
-            e.timer[i] = EXPLODER.fuse;
+            e.timer[i] -= dt;
+            if (e.timer[i] <= 0 && dist < ARCHER.fireRange) {
+              this.fireEnemyShot(i);
+              e.timer[i] = ARCHER.cooldown * this.rng.range(0.85, 1.15);
+            }
+            break;
           }
-          break;
+          case 'exploder': {
+            if (e.timer[i] >= 0) {
+              e.timer[i] -= dt;
+              sp *= 0.25;
+              if (e.timer[i] <= 0) {
+                this.explode(i);
+                continue;
+              }
+            } else if (dist < EXPLODER.triggerRange) {
+              e.timer[i] = EXPLODER.fuse;
+            }
+            break;
+          }
+          case 'chase':
+            break;
         }
-        case 'chase':
-          break;
-      }
       const vx = ux * sp;
       const vz = uz * sp;
-      e.vx[i] = vx;
-      e.vz[i] = vz;
+      // Donukken son yönü koru (render yüz yönü için).
+      if (!frozen) {
+        e.vx[i] = vx;
+        e.vz[i] = vz;
+      }
 
       // Ayrışma (uzaktakiler için 3 tick'te bir — LOD).
       let sx = 0;
@@ -655,18 +715,31 @@ export class World {
         e.z[i] -= (cz / d) * overlap * 0.7;
         p.x += (cx / d) * overlap * 0.3;
         p.z += (cz / d) * overlap * 0.3;
-        if (e.contactCd[i] <= 0) {
-          e.contactCd[i] = PB.contactCooldown;
-          const dealt = this.hurtPlayer(e.damage[i]);
-          const thorns = this.itemCounts[ITEM_INDEX.thorns];
-          if (thorns > 0 && dealt > 0) {
-            this.damageEnemy(i, (dealt * ITEM_FX.thornsMult * thorns) / this.stats.get('damage'), -cx, -cz);
-          }
-        }
+        if (e.contactCd[i] <= 0) this.contact(i, cx / d, cz / d, frozen);
       }
     }
     p.x = this.terrain.clampToPlayable(p.x);
     p.z = this.terrain.clampToPlayable(p.z);
+  }
+
+  /** Düşman oyuncuya değdi (bekleme süresi bitmişken). (ux,uz): düşmandan oyuncuya birim yön. */
+  private contact(i: number, ux: number, uz: number, frozen: boolean): void {
+    const e = this.enemies;
+    const rocket = this.itemCounts[ITEM_INDEX.rocket];
+    if (rocket > 0 && this.player.sliding) {
+      // Roket Çizme: kayarken çarpılan düşman hasar alır ve savrulur, oyuncu hasar almaz.
+      e.contactCd[i] = PB.contactCooldown;
+      const kb = ITEM_FX.rocketKnockback;
+      this.damageEnemy(i, ITEM_FX.rocketDamage * rocket, -ux * kb, -uz * kb);
+      return;
+    }
+    if (frozen) return;
+    e.contactCd[i] = PB.contactCooldown;
+    const dealt = this.hurtPlayer(e.damage[i]);
+    const thorns = this.itemCounts[ITEM_INDEX.thorns];
+    if (thorns > 0 && dealt > 0) {
+      this.damageEnemy(i, (dealt * ITEM_FX.thornsMult * thorns) / this.stats.get('damage'), -ux, -uz);
+    }
   }
 
   /** Hasar uygular (kritik, geri itme, ölüm). Ham hasar oyuncunun hasar çarpanıyla ölçeklenir. */
@@ -683,7 +756,14 @@ export class World {
     e.kz[i] += kz * k;
     this.damageDealt += dmg;
     this.hitFx.push(e.x[i], e.y[i] + e.hover[i] + 1, e.z[i], dmg, crit ? 1 : 0);
-    if (e.hp[i] <= 0) this.killEnemy(i);
+    if (e.hp[i] <= 0) {
+      this.killEnemy(i);
+      return;
+    }
+    const frost = this.itemCounts[ITEM_INDEX.frost];
+    if (frost > 0 && this.rng.chance(Math.min(ITEM_FX.frostMaxChance, ITEM_FX.frostChance * frost))) {
+      this.freezeEnemy(i, ITEM_FX.frostTime);
+    }
   }
 
   killEnemy(i: number): void {

@@ -79,8 +79,9 @@ export class PlayerView {
     this.body.scale.set(1 + (1 - sy) * 0.6, sy, 1 + (1 - sy) * 0.6);
     this.body.rotation.x = lean;
 
-    // Hasar alınca kırmızı yanıp sön.
+    // Hasar alınca kırmızı, dokunulmazken (Anka Tüyü) altın rengi yanıp sön.
     const hurt = p.hurtTimer > 0 && Math.floor(p.hurtTimer * 30) % 2 === 0;
-    this.bodyMat.color.setHex(hurt ? 0xff4d4d : 0x3b6fd8);
+    const holy = p.invuln > 0 && Math.floor(p.invuln * 12) % 2 === 0;
+    this.bodyMat.color.setHex(hurt ? 0xff4d4d : holy ? 0xffd34d : 0x3b6fd8);
   }
 }

@@ -35,13 +35,15 @@ test('oyun açılır, oynanır ve seviye atlama çalışır', async ({ page }, t
   await page.getByTestId('play').click();
   await expect.poll(async () => (await gameState(page)).state).toBe('playing');
 
-  // İleri koş, zıpla, kay.
+  // İleri koş, zıpla, kay. Yazılım GPU'sunda kare hızı düşük olabilir: sabit bekleme yerine
+  // sim zamanını yokla.
+  const simTime = async () => (await gameState(page)).time;
   await page.keyboard.down('KeyW');
-  await page.waitForTimeout(1200);
+  await expect.poll(simTime, { timeout: 20_000 }).toBeGreaterThan(0.6);
   await page.keyboard.press('Space');
-  await page.waitForTimeout(600);
+  await expect.poll(simTime, { timeout: 20_000 }).toBeGreaterThan(0.9);
   await page.keyboard.down('ShiftLeft');
-  await page.waitForTimeout(500);
+  await expect.poll(simTime, { timeout: 20_000 }).toBeGreaterThan(1.2);
   await page.keyboard.up('ShiftLeft');
   await page.keyboard.up('KeyW');
 
@@ -68,9 +70,14 @@ test('oyun açılır, oynanır ve seviye atlama çalışır', async ({ page }, t
   await page.getByTestId('card-0').click();
   await expect.poll(async () => (await gameState(page)).state).toBe('playing');
 
-  // Esc → duraklat → Esc → devam
+  // Esc → duraklat → rehber → geri → Esc → devam
   await page.keyboard.press('Escape');
   await expect.poll(async () => (await gameState(page)).state).toBe('paused');
+  await page.getByTestId('guide').click();
+  await expect(page.getByTestId('guide-panel')).toContainText('Anka Tüyü');
+  await page.screenshot({ path: testInfo.outputPath('4-guide.png') });
+  await page.getByTestId('guide-back').click();
+  await expect(page.getByTestId('guide')).toBeVisible();
   await page.keyboard.press('Escape');
   await expect.poll(async () => (await gameState(page)).state).toBe('playing');
 

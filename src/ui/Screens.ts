@@ -1,4 +1,6 @@
 import { BALANCE } from '../data/balance';
+import { ITEMS } from '../data/items';
+import { RARITIES } from '../sim/progression/Rarity';
 import type { SlotUsage, UpgradeView } from '../sim/progression/Upgrades';
 import type { World } from '../sim/world/World';
 import { formatTime, h } from './dom';
@@ -195,12 +197,53 @@ export class Screens {
     );
   }
 
-  showPause(onResume: () => void, onRestart: () => void): void {
+  showPause(world: World, onResume: () => void, onRestart: () => void): void {
     const resume = h('button.btn.btn-primary', {}, 'DEVAM');
     resume.addEventListener('click', onResume);
+    const guide = h('button.btn', { 'data-testid': 'guide' }, '📖 Rehber');
+    guide.addEventListener('click', () =>
+      this.showGuide(world, () => this.showPause(world, onResume, onRestart)),
+    );
     const restart = h('button.btn', {}, 'Yeniden Başla');
     restart.addEventListener('click', onRestart);
-    this.show(h('div.panel', {}, h('h2', {}, 'Duraklatıldı'), h('div.buttons', {}, resume, restart)));
+    this.show(h('div.panel', {}, h('h2', {}, 'Duraklatıldı'), h('div.buttons', {}, resume, guide, restart)));
+  }
+
+  /** Rehber: sandık eşyaları nadirliğe göre gruplu; sahip olunanlar vurgulu. */
+  showGuide(world: World, onBack: () => void): void {
+    const back = h('button.btn.btn-primary', { 'data-testid': 'guide-back' }, '← Geri');
+    back.addEventListener('click', onBack);
+    const groups = RARITIES.map((r, rarity) => {
+      const rows = ITEMS.flatMap((d, i) => {
+        if (d.rarity !== rarity) return [];
+        const owned = world.itemCounts[i];
+        return [
+          h(
+            `li.guide-row${owned > 0 ? '.owned' : ''}`,
+            {},
+            h('span.guide-icon', {}, d.icon),
+            h('span.guide-text', {}, h('b', {}, d.name), h('span', {}, d.description)),
+            owned > 0 ? h('span.guide-owned', {}, `×${owned}`) : '',
+          ),
+        ];
+      });
+      return h(
+        'section.guide-group',
+        { 'data-rarity': String(rarity) },
+        h('h3', {}, r.name),
+        h('ul', {}, ...rows),
+      );
+    });
+    this.show(
+      h(
+        'div.panel.guide',
+        { 'data-testid': 'guide-panel' },
+        h('h2', {}, 'Rehber · Eşyalar'),
+        h('p.subtitle', {}, 'Sandıklardan çıkar. Nadirlik zarını Şans artırır.'),
+        h('div.guide-list', {}, ...groups),
+        h('div.buttons', {}, back),
+      ),
+    );
   }
 
   showGameOver(world: World, onRestart: () => void): void {

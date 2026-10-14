@@ -32,6 +32,8 @@ export class Player {
   maxHp: number = P.baseHp;
   /** Hasar alınca kısa süreli kırmızı yanıp sönme için. */
   hurtTimer = 0;
+  /** Dokunulmazlık süresi (Anka Tüyü dirilişi): >0 iken hasar alınmaz. */
+  invuln = 0;
   /** Son zıplamanın zamanı (animasyon için). */
   airTime = 0;
 
@@ -67,6 +69,7 @@ export class Player {
 
     // Zamanlayıcılar
     this.hurtTimer = Math.max(0, this.hurtTimer - dt);
+    this.invuln = Math.max(0, this.invuln - dt);
     this.slideCooldown = Math.max(0, this.slideCooldown - dt);
     this.jumpBuffer = input.jump ? P.jumpBuffer : Math.max(0, this.jumpBuffer - dt);
     this.coyote = this.grounded ? P.coyoteTime : Math.max(0, this.coyote - dt);

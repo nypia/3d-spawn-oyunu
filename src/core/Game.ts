@@ -158,6 +158,7 @@ export class Game {
     this.setState('paused');
     this.input.exitLock();
     this.screens.showPause(
+      this.world,
       () => this.resume(),
       () => {
         this.world = this.createWorld();

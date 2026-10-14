@@ -19,8 +19,10 @@ export class Hud {
   private readonly hpText = h('span.hp-text');
   private readonly loadout = h('div.hud-loadout');
   private readonly hint = h('div.hud-hint');
+  /** Kısa süreli duyuru (Anka Tüyü dirilişi vb.). */
+  private readonly toast = h('div.hud-toast', { 'data-testid': 'toast' });
   private lastLoadoutKey = '';
-  private lastText = { level: '', timer: '', kills: '', gold: '', hp: '', hint: '' };
+  private lastText = { level: '', timer: '', kills: '', gold: '', hp: '', hint: '', toast: '' };
 
   constructor(parent: HTMLElement) {
     this.el = h(
@@ -31,10 +33,12 @@ export class Hud {
       h('div.hud-kills', {}, h('span', {}, '💀 '), this.kills, h('span.hud-gold', {}, '🪙 ', this.gold)),
       this.loadout,
       this.hint,
+      this.toast,
       h('div.hp-bar', {}, this.hpFill, this.hpText),
     );
     parent.append(this.el);
     this.hint.style.display = 'none';
+    this.toast.style.display = 'none';
     this.setVisible(false);
   }
 
@@ -51,6 +55,11 @@ export class Hud {
     this.setText('kills', this.kills, String(world.kills));
     this.setText('gold', this.gold, String(Math.floor(world.gold)));
     this.setText('hp', this.hpText, `${Math.ceil(p.hp)} / ${Math.round(p.maxHp)}`);
+
+    const toast =
+      world.revivedAt >= 0 && world.time - world.revivedAt < 2.5 ? '🦅 Anka Tüyü: küllerinden doğdun!' : '';
+    if (toast !== this.lastText.toast) this.toast.style.display = toast ? '' : 'none';
+    this.setText('toast', this.toast, toast);
 
     const chest = world.nearbyChest();
     const shrine = chest ? null : world.nearbyShrine();

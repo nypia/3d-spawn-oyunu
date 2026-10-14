@@ -15,6 +15,7 @@ import { CameraRig } from './CameraRig';
 import { DamageNumbers } from './DamageNumbers';
 import { PlayerView } from './PlayerView';
 import { PropsView } from './PropsView';
+import { PulseFx } from './PulseFx';
 import type { QualitySettings } from './Quality';
 import { WeaponFx } from './WeaponFx';
 import { WorldView } from './WorldView';
@@ -32,6 +33,7 @@ export class Renderer3D {
   private readonly worldView: WorldView;
   private readonly weaponFx = new WeaponFx();
   private readonly props: PropsView;
+  private readonly pulses = new PulseFx();
   readonly damageNumbers = new DamageNumbers();
   private time = 0;
 
@@ -74,6 +76,7 @@ export class Renderer3D {
       this.playerView.root,
       this.weaponFx.root,
       this.props.root,
+      this.pulses.mesh,
       this.damageNumbers.mesh,
     );
 
@@ -88,6 +91,7 @@ export class Renderer3D {
   setWorld(world: World): void {
     this.worldView.setWorld(world);
     this.weaponFx.reset(world);
+    this.pulses.reset(world);
     this.damageNumbers.reset(world);
   }
 
@@ -115,6 +119,7 @@ export class Renderer3D {
     this.worldView.update(world, this.time, dt);
     this.weaponFx.update(world, this.time, dt);
     this.props.update(world, this.time);
+    this.pulses.update(world, dt);
     this.damageNumbers.update(world, dt);
     this.renderer.render(this.scene, this.camera);
   }

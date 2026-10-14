@@ -34,6 +34,8 @@ export class EnemyPool {
   readonly scale: Float32Array;
   /** Davranışa özel sayaç: okçuda atış bekleme süresi, patlayanda fitil (−1 = sönük). */
   readonly timer: Float32Array;
+  /** Donma süresi (Buz Kristali, Saat): >0 iken hareket, saldırı ve temas hasarı yok. */
+  readonly frozen: Float32Array;
   readonly type: Uint8Array;
   readonly elite: Uint8Array;
   readonly dead: Uint8Array;
@@ -62,6 +64,7 @@ export class EnemyPool {
     this.xp = f();
     this.scale = f();
     this.timer = f();
+    this.frozen = f();
     this.type = new Uint8Array(capacity);
     this.elite = new Uint8Array(capacity);
     this.dead = new Uint8Array(capacity);
@@ -83,6 +86,7 @@ export class EnemyPool {
     this.flash[i] = 0;
     this.scale[i] = 1;
     this.timer[i] = 0;
+    this.frozen[i] = 0;
     this.elite[i] = 0;
     return i;
   }
@@ -116,6 +120,7 @@ export class EnemyPool {
     this.xp[i] = this.xp[last];
     this.scale[i] = this.scale[last];
     this.timer[i] = this.timer[last];
+    this.frozen[i] = this.frozen[last];
     this.type[i] = this.type[last];
     this.elite[i] = this.elite[last];
     this.dead[i] = this.dead[last];

@@ -2,8 +2,10 @@ import type { Rarity } from '../sim/progression/Rarity';
 import type { StatKey } from '../sim/stats/Stats';
 
 /**
- * Eşyalar sandıklardan çıkar, birikebilir (aynı eşyadan birden fazla alınabilir).
- * Basit olanlar stat ekler; özel etkiler World içindeki kancalarda uygulanır (id ile).
+ * Eşyalar sandıklardan çıkar ve birikebilir (aynı eşyadan birden fazla alınabilir).
+ * Sandık önce nadirlik zarı atar (Şans etkiler), sonra o kademeden bir eşya seçer.
+ * Her eşyanın kendine özgü bir mekaniği var; kitaplarla çakışan saf stat eşyası yok.
+ * Basit olanlar stat ekler; özel etkiler World/Weapons içindeki kancalarda uygulanır (id ile).
  */
 export interface ItemDef {
   id: string;
@@ -16,6 +18,7 @@ export interface ItemDef {
 }
 
 export const ITEMS: readonly ItemDef[] = [
+  // ---- Sıradan
   {
     id: 'feather',
     name: 'Tüy',
@@ -29,28 +32,24 @@ export const ITEMS: readonly ItemDef[] = [
     name: 'Altın Sikke',
     icon: '🪙',
     rarity: 0,
-    description: 'Altın kazancı +%25',
-    stats: [{ stat: 'goldGain', mode: 'mult', value: 0.25 }],
+    description: 'Altın kazancı +%30',
+    stats: [{ stat: 'goldGain', mode: 'mult', value: 0.3 }],
   },
   {
-    id: 'hourglass',
-    name: 'Kum Saati',
-    icon: '⏳',
+    id: 'bandage',
+    name: 'Bandaj',
+    icon: '🩹',
     rarity: 0,
-    description: 'Mermi ve efekt süresi +%15',
-    stats: [{ stat: 'duration', mode: 'mult', value: 0.15 }],
+    description: 'Her seviye atlamada 15 can yenilersin',
   },
   {
-    id: 'boots',
-    name: 'Çizme',
-    icon: '🥾',
+    id: 'lodestone',
+    name: 'Mıknatıs Taşı',
+    icon: '🧲',
     rarity: 0,
-    description: 'Hareket hızı +%8, kayma hızı +%25',
-    stats: [
-      { stat: 'moveSpeed', mode: 'mult', value: 0.08 },
-      { stat: 'slidePower', mode: 'mult', value: 0.25 },
-    ],
+    description: '40 saniyede bir 15 m içindeki XP ve altını sana çeker (her kopya daha sık)',
   },
+  // ---- Nadir
   {
     id: 'fang',
     name: 'Vampir Dişi',
@@ -67,13 +66,25 @@ export const ITEMS: readonly ItemDef[] = [
     stats: [{ stat: 'armor', mode: 'flat', value: 2 }],
   },
   {
-    id: 'clover',
-    name: 'Yonca',
-    icon: '☘️',
+    id: 'eye',
+    name: 'Keskin Göz',
+    icon: '🎯',
     rarity: 1,
-    description: 'Şans +20',
-    stats: [{ stat: 'luck', mode: 'flat', value: 0.2 }],
+    description: 'Kritik şansı +%10, kritik hasarı +%25',
+    stats: [
+      { stat: 'critChance', mode: 'flat', value: 0.1 },
+      { stat: 'critDamage', mode: 'flat', value: 0.25 },
+    ],
   },
+  {
+    id: 'rocket',
+    name: 'Roket Çizme',
+    icon: '🚀',
+    rarity: 1,
+    description: 'Kayma +%30; kayarken çarptığın düşmanlar hasar alır, sen almazsın',
+    stats: [{ stat: 'slidePower', mode: 'mult', value: 0.3 }],
+  },
+  // ---- Epik
   {
     id: 'amulet',
     name: 'Kalkan Muskası',
@@ -89,16 +100,38 @@ export const ITEMS: readonly ItemDef[] = [
     description: 'Öldürdüğün düşman %10 ihtimalle patlayıp çevresine hasar verir',
   },
   {
+    id: 'frost',
+    name: 'Buz Kristali',
+    icon: '❄️',
+    rarity: 2,
+    description: 'Vuruşların %8 ihtimalle düşmanı 1,5 saniye dondurur',
+  },
+  {
+    id: 'phoenix',
+    name: 'Anka Tüyü',
+    icon: '🦅',
+    rarity: 2,
+    description: 'Ölünce bir kez %50 canla dirilirsin, etrafa alev patlaması (tek kullanımlık)',
+  },
+  // ---- Efsanevi
+  {
     id: 'crown',
     name: 'Lanetli Taç',
     icon: '👑',
     rarity: 3,
-    description: 'Daha çok düşman gelir (+%20), ama XP ve altın +%20',
+    description: 'Daha çok düşman gelir (+%25), ama XP ve altın +%30',
     stats: [
-      { stat: 'curse', mode: 'flat', value: 0.2 },
-      { stat: 'xpGain', mode: 'mult', value: 0.2 },
-      { stat: 'goldGain', mode: 'mult', value: 0.2 },
+      { stat: 'curse', mode: 'flat', value: 0.25 },
+      { stat: 'xpGain', mode: 'mult', value: 0.3 },
+      { stat: 'goldGain', mode: 'mult', value: 0.3 },
     ],
+  },
+  {
+    id: 'echo',
+    name: 'Yankı Yüzüğü',
+    icon: '💍',
+    rarity: 3,
+    description: 'Silahların %20 ihtimalle bir kez daha ateşlenir',
   },
 ];
 
@@ -115,4 +148,24 @@ export const ITEM_FX = {
   skullChance: 0.1,
   skullRadius: 3,
   skullDamage: 20,
+  bandageHeal: 15,
+  lodestoneCooldown: 40,
+  /** Her ek kopya bekleme süresini bu kadar kısaltır (en az `lodestoneMin`). */
+  lodestonePerCopy: 10,
+  lodestoneMin: 15,
+  lodestoneRadius: 15,
+  /** Roket Çizme: kayarken temas hasarı (ham, oyuncu hasar çarpanıyla ölçeklenir) ve itme. */
+  rocketDamage: 25,
+  rocketKnockback: 10,
+  frostChance: 0.08,
+  frostMaxChance: 0.3,
+  frostTime: 1.5,
+  phoenixHp: 0.5,
+  phoenixInvuln: 2,
+  phoenixRadius: 7,
+  phoenixDamage: 80,
+  echoChance: 0.2,
+  echoMaxChance: 0.6,
+  /** Yankının ilk atıştan ne kadar sonra geldiği (sn). */
+  echoDelay: 0.15,
 };
