@@ -511,7 +511,7 @@ export class World {
     e.radius[i] = d.radius * scale;
     e.hover[i] = d.hover;
     e.knockResist[i] = elite ? Math.min(0.9, d.knockbackResist + 0.5) : d.knockbackResist;
-    e.xp[i] = d.xp * (elite ? ELITE.xp : 1);
+    e.xp[i] = d.xp * (elite ? ELITE.xp : 1) * (1 + XB.xpPerMinute * (this.time / 60));
     e.scale[i] = scale;
     e.elite[i] = elite ? 1 : 0;
     e.phase[i] = this.rng.range(0, Math.PI * 2);
@@ -677,7 +677,7 @@ export class World {
     const x = e.x[i];
     const z = e.z[i];
     const gy = this.terrain.heightAt(x, z) + 0.35;
-    this.gems.add(x, gy, z, e.xp[i]);
+    this.gems.add(x, gy, z, e.xp[i], this.player.x, this.player.z);
     if (e.elite[i]) {
       // Elit: ücretsiz ödül sandığı + biraz altın.
       this.eliteKills++;

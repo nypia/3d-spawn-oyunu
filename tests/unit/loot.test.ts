@@ -92,7 +92,7 @@ describe('ganimet', () => {
   it('mıknatıs tüm XP taşlarını çeker', () => {
     const w = arena();
     const p = w.player;
-    w.gems.add(p.x + 40, p.y, p.z, 1);
+    w.gems.add(p.x + 40, p.y, p.z, 1, p.x, p.z);
     w.dropPickup(PICKUP_MAGNET, p.x, p.y + 0.5, p.z, 1);
     for (let t = 0; t < 4; t += DT) w.step(NO_INPUT, DT);
     expect(w.gems.count).toBe(0);

@@ -13,7 +13,7 @@ function botChoice(world: World): number {
  * Tarayıcı olmadan tam bir run simüle eder: bot daireler çizerek koşar, ara sıra zıplar/kayar,
  * seviye atlayınca hep ilk kartı seçer. Amaç: NaN, exception, sınır taşması ve performans regresyonu yakalamak.
  */
-function runBot(world: World, seconds: number): { maxEnemies: number; worstStepMs: number } {
+function runBot(world: World, seconds: number, move = true): { maxEnemies: number; worstStepMs: number } {
   const dt = BALANCE.simStep;
   const steps = Math.round(seconds / dt);
   const input: PlayerInput = { moveX: 0, moveZ: 0, jump: false, slide: false };
@@ -21,8 +21,8 @@ function runBot(world: World, seconds: number): { maxEnemies: number; worstStepM
   let worstStepMs = 0;
   for (let s = 0; s < steps && !world.gameOver; s++) {
     const t = s * dt;
-    input.moveX = Math.cos(t * 0.35);
-    input.moveZ = Math.sin(t * 0.35);
+    input.moveX = move ? Math.cos(t * 0.35) : 0;
+    input.moveZ = move ? Math.sin(t * 0.35) : 0;
     input.jump = s % 150 === 0;
     input.slide = s % 400 < 40;
     while (world.offer || world.reward) {
@@ -61,8 +61,9 @@ describe('headless run', () => {
   });
 
   it('normal bot zamanla ölür ve oyun durur', () => {
+    // Hareketsiz bot XP toplayamaz; seed ve denge değişse de belirli sürede ölür.
     const world = new World({ seed: 99 });
-    runBot(world, 900);
+    runBot(world, 900, false);
     expect(world.gameOver).toBe(true);
     const t = world.time;
     world.step({ moveX: 1, moveZ: 0, jump: false, slide: false }, BALANCE.simStep);

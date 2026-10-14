@@ -36,7 +36,7 @@ export const ARCHER = {
 /** Patlayan: fitil mesafesi, fitil süresi (s), patlama yarıçapı (m). */
 export const EXPLODER = { triggerRange: 2, fuse: 0.8, radius: 2.6 };
 /** Elit çarpanları. */
-export const ELITE = { hp: 8, damage: 1.5, scale: 1.6, xp: 10, speed: 0.9, interval: 75 };
+export const ELITE = { hp: 8, damage: 1.5, scale: 1.6, xp: 12, speed: 0.9, interval: 75 };
 
 export const ENEMIES: readonly EnemyDef[] = [
   {
@@ -118,7 +118,7 @@ export const ENEMIES: readonly EnemyDef[] = [
     speed: 3.2,
     damage: 6,
     radius: 0.5,
-    xp: 3,
+    xp: 4,
     cost: 3,
     unlockTime: 210,
     weight: 4,
@@ -136,7 +136,7 @@ export const ENEMIES: readonly EnemyDef[] = [
     speed: 1.9,
     damage: 12,
     radius: 0.85,
-    xp: 5,
+    xp: 8,
     cost: 4,
     unlockTime: 270,
     weight: 4,

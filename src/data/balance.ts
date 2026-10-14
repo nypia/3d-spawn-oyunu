@@ -46,8 +46,11 @@ export const BALANCE = {
   xp: {
     /** xpToNext(n) = round(base * n^exp) */
     base: 6,
-    exp: 1.35,
-    gemCapacity: 2500,
+    exp: 1.42,
+    /** Yerde en fazla bu kadar XP taşı; fazlası en uzak taşı yeni taşa katar (XP kaybolmaz). */
+    gemCapacity: 800,
+    /** Düşman XP'si zamanla artar: xp × (1 + xpPerMinute·dk). */
+    xpPerMinute: 0.08,
     magnetBaseSpeed: 9,
     magnetAccel: 45,
     collectRadius: 0.9,

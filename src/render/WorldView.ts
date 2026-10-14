@@ -14,7 +14,9 @@ import {
   RingGeometry,
   Vector3,
 } from 'three';
+import { BALANCE } from '../data/balance';
 import { ENEMIES, EXPLODER } from '../data/enemies';
+import { GEM_TIERS, gemTier } from '../data/gems';
 import { CHEST, SHRINE } from '../sim/world/Interactables';
 import { OBSTACLE_ROCK, OBSTACLE_TREE } from '../sim/world/Obstacles';
 import type { World } from '../sim/world/World';
@@ -117,7 +119,7 @@ export class WorldView {
     this.gems = instanced(
       gemGeometry(),
       new MeshLambertMaterial({ color: 0xffffff, emissive: 0x1b4a7a, flatShading: true }),
-      2500,
+      BALANCE.xp.gemCapacity,
       false,
     );
     this.gems.setColorAt(0, WHITE);
@@ -311,14 +313,14 @@ export class WorldView {
     let k = 0;
     for (let i = 0; i < g.count; i++) {
       if (g.dead[i]) continue;
-      const v = g.value[i];
+      const tier = GEM_TIERS[gemTier(g.value[i])];
       const bob = g.pull[i] > 0 ? 0 : Math.sin(time * 3 + i) * 0.08;
       pos.set(g.x[i], g.y[i] + bob, g.z[i]);
       quat.setFromAxisAngle(UP, time * 2 + i);
-      scl.setScalar(v >= 20 ? 1.8 : v >= 5 ? 1.35 : 1);
+      scl.setScalar(tier.scale);
       m4.compose(pos, quat, scl);
       this.gems.setMatrixAt(k, m4);
-      col.setHex(v >= 20 ? 0xff5a5a : v >= 5 ? 0x5dff8a : 0x5ad1ff);
+      col.setHex(tier.color);
       this.gems.setColorAt(k, col);
       k++;
     }

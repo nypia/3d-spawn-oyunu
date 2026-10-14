@@ -14,7 +14,8 @@
     "format": "biome check --write .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "diag": "vitest run --config vitest.diag.config.ts"
   },
   "dependencies": {
     "simplex-noise": "4.0.3",
