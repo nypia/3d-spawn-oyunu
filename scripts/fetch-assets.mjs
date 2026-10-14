@@ -50,14 +50,11 @@ const KITS = [
     anims: CHARACTER_ANIMS,
     models: [
       'character-skeleton',
-      'fire-basket',
-      'altar-stone',
       'pillar-obelisk',
       'gravestone-round',
       'gravestone-cross',
       'gravestone-broken',
       'gravestone-bevel',
-      'lantern-candle',
       'candle-multiple',
     ],
   },
@@ -69,7 +66,7 @@ const KITS = [
     dir: 'Models/GLB format',
     texture: 'Models/GLB format/Textures/colormap.png',
     anims: CHARACTER_ANIMS,
-    models: ['character-orc', 'chest', 'pot', 'coin', 'barrel'],
+    models: ['character-orc', 'chest', 'pot', 'coin'],
   },
   {
     kit: 'nature',
@@ -82,7 +79,6 @@ const KITS = [
     models: [
       'tree_oak',
       'tree_default',
-      'tree_detailed',
       'tree_fat',
       'tree_plateau',
       'tree_small',
@@ -111,7 +107,6 @@ const KITS = [
       'plant_bushLarge',
       'plant_bushSmall',
       'grass_large',
-      'grass_leafsLarge',
       'stump_round',
       'stump_old',
       'log',
@@ -290,6 +285,15 @@ ${KITS.map((k) => `| ${k.title} | ${k.models.length} model${k.texture ? ' + renk
 
 Modeller \`npm run fetch-assets\` ile indirilip küçültülür (dış doku bağlantıları ve kullanılmayan animasyonlar
 silinir). Balçık, Yarasa, Patlayan ve Golem gibi diğer modeller koddan üretilir (\`src/render\`).
+
+## Yazı tipleri
+
+| Yazı tipi | Kullanım | Lisans | Kaynak |
+|---|---|---|---|
+| Baloo 2 (Ek Type) | Başlıklar, HUD | SIL Open Font License 1.1 | https://github.com/EkType/Baloo2 |
+| Nunito (Vernon Adams) | Metin | SIL Open Font License 1.1 | https://github.com/googlefonts/nunito |
+
+Yazı tipleri [Fontsource](https://fontsource.org) paketlerinden alınır ve derlemeye gömülür.
 `;
 writeFileSync('CREDITS.md', credits);
 console.log(`toplam ${(total / 1024).toFixed(0)} KB`);
