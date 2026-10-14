@@ -1,11 +1,17 @@
+import { createNoise2D } from 'simplex-noise';
 import { BufferAttribute, BufferGeometry, Color, Mesh, MeshLambertMaterial } from 'three';
+import { Rng } from '../core/Rng';
 import type { Heightmap } from '../sim/terrain/Heightmap';
 
-const GRASS_LOW = new Color(0x3f7d3a);
-const GRASS = new Color(0x5ea24a);
-const GRASS_HIGH = new Color(0x9cbf5a);
-const DIRT = new Color(0x8a6a45);
-const ROCK = new Color(0x7d7a73);
+// Çizgi film paleti: doygun çayır, sıcak toprak, serin kaya.
+const GRASS_LOW = new Color(0x4a9a3c);
+const GRASS = new Color(0x68bb4a);
+const GRASS_HIGH = new Color(0xa6d164);
+/** Çayır lekeleri: açık sarımsı yeşil ve koyu yeşil. */
+const MEADOW = new Color(0x9fd75a);
+const SHADE = new Color(0x3f8a38);
+const DIRT = new Color(0xa27d4f);
+const ROCK = new Color(0x8f8c86);
 
 /**
  * Yükseklik haritasından mesh üretir. Üçgenleme Heightmap.heightAt ile birebir aynıdır.
@@ -17,6 +23,8 @@ export function createTerrainMesh(hm: Heightmap): Mesh {
   const col = new Float32Array(n * n * 3);
   const normal = [0, 0, 0];
   const c = new Color();
+  const rng = new Rng(7331);
+  const noise = createNoise2D(() => rng.next());
 
   for (let j = 0; j < n; j++) {
     for (let i = 0; i < n; i++) {
@@ -33,6 +41,10 @@ export function createTerrainMesh(hm: Heightmap): Mesh {
       const t = Math.min(1, Math.max(0, (h + 4) / 14));
       if (t < 0.5) c.lerpColors(GRASS_LOW, GRASS, t * 2);
       else c.lerpColors(GRASS, GRASS_HIGH, (t - 0.5) * 2);
+      // Geniş açık/koyu çayır lekeleri: düzlükler tekdüze görünmesin.
+      const patch = noise(x * 0.018, z * 0.018) + 0.5 * noise(x * 0.06, z * 0.06);
+      if (patch > 0.35) c.lerp(MEADOW, Math.min(1, (patch - 0.35) * 1.6));
+      else if (patch < -0.45) c.lerp(SHADE, Math.min(1, (-0.45 - patch) * 1.6));
       if (slope > 0.12) c.lerp(DIRT, Math.min(1, (slope - 0.12) * 5));
       if (slope > 0.35) c.lerp(ROCK, Math.min(1, (slope - 0.35) * 4));
       // Low-poly çeşitlilik için hafif titreşim (deterministik).

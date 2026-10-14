@@ -7,6 +7,8 @@ export interface QualitySettings {
   shadows: boolean;
   shadowMapSize: number;
   enemyCap: number;
+  /** Çimen tutamı sayısı. */
+  grassCount: number;
 }
 
 export const QUALITY_HIGH: QualitySettings = {
@@ -16,6 +18,7 @@ export const QUALITY_HIGH: QualitySettings = {
   shadows: true,
   shadowMapSize: 2048,
   enemyCap: BALANCE.spawn.capDesktop,
+  grassCount: 9000,
 };
 
 export const QUALITY_LOW: QualitySettings = {
@@ -25,6 +28,7 @@ export const QUALITY_LOW: QualitySettings = {
   shadows: false,
   shadowMapSize: 512,
   enemyCap: BALANCE.spawn.capMobile,
+  grassCount: 3500,
 };
 
 export function isTouchDevice(): boolean {

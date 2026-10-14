@@ -18,13 +18,15 @@ import { BALANCE } from '../data/balance';
 import { ENEMIES, EXPLODER } from '../data/enemies';
 import { GEM_TIERS, gemTier } from '../data/gems';
 import { CHEST, SHRINE } from '../sim/world/Interactables';
-import { OBSTACLE_ROCK, OBSTACLE_TREE } from '../sim/world/Obstacles';
+import { OBSTACLE_TREE } from '../sim/world/Obstacles';
 import { TORCH_FX } from '../sim/world/Torches';
 import type { World } from '../sim/world/World';
 import type { GameAssets } from './assets/loadAssets';
+import { coloredGeometry, NATURE_PALETTE, size } from './assets/staticModels';
 import { BlobShadows } from './BlobShadows';
+import { CulledInstances } from './CulledInstances';
 import { buildEnemyLooks, type EnemyLook } from './crowd/enemyLooks';
-import { arrowGeometry, gemGeometry, puffGeometry, rockGeometry, treeGeometry } from './shapes';
+import { arrowGeometry, gemGeometry, puffGeometry } from './shapes';
 import { createTerrainMesh } from './TerrainView';
 
 const UP = new Vector3(0, 1, 0);
@@ -35,10 +37,10 @@ const scl = new Vector3();
 const col = new Color();
 const WHITE = new Color(1, 1, 1);
 /** Elitler altın tonda parlar. */
-const ELITE_TINT = new Color(1.7, 1.35, 0.55);
+const ELITE_TINT = new Color(1.55, 1.3, 0.6);
 const FUSE_FLASH = new Color(3, 2.2, 1.2);
 /** Donmuş düşman: buz mavisi. */
-const ICE_TINT = new Color(0.55, 1.15, 1.9);
+const ICE_TINT = new Color(0.6, 0.9, 1.35);
 const ARROW_FWD = new Vector3(0, 0, 1);
 const arrowDir = new Vector3();
 
@@ -67,6 +69,31 @@ interface Corpse {
   t: number;
 }
 
+/** Statik dekor modeli: birleşik geometri ve ham boyutu. */
+interface DecorKind {
+  geometry: BufferGeometry;
+  width: number;
+  height: number;
+}
+
+const TREE_MODELS = [
+  'tree_oak',
+  'tree_default',
+  'tree_fat',
+  'tree_plateau',
+  'tree_small',
+  'tree_pineRoundA',
+  'tree_pineRoundC',
+  'tree_pineTallA_detailed',
+  'tree_cone',
+];
+const ROCK_MODELS = ['rock_largeA', 'rock_largeB', 'rock_largeC', 'rock_largeD', 'rock_tallA', 'rock_tallB'];
+
+/** Sim engel indeksinden deterministik varyant seçimi. */
+function variant(i: number, n: number): number {
+  return Math.abs(Math.imul(i + 1, 2654435761) >> 7) % n;
+}
+
 const CORPSE_LIFE = 1.1;
 const CORPSE_CAP = 64;
 
@@ -87,8 +114,11 @@ interface Puff {
 export class WorldView {
   readonly root = new Group();
   private terrain: Mesh | null = null;
-  private trees: InstancedMesh | null = null;
-  private rocks: InstancedMesh | null = null;
+  /** Ağaç ve kaya varyantları (Kenney nature-kit), her biri tek draw call. */
+  private decor: CulledInstances[] = [];
+  private readonly treeKinds: DecorKind[];
+  private readonly rockKinds: DecorKind[];
+  private readonly decorMaterial = new MeshLambertMaterial({ vertexColors: true, flatShading: true });
   /** Tür başına animasyonlu kalabalık (CrowdMesh). */
   private readonly looks: (EnemyLook | null)[];
   private readonly lookCounts: number[];
@@ -110,6 +140,16 @@ export class WorldView {
     private readonly shadows: boolean,
     assets: GameAssets,
   ) {
+    const decorKind = (k: string): DecorKind => {
+      const geometry = coloredGeometry(assets.model(`nature/${k}`), {
+        ...NATURE_PALETTE,
+        _defaultMat: 0x9a958c,
+      });
+      const [w, h, d] = size(geometry);
+      return { geometry, width: Math.max(w, d), height: h };
+    };
+    this.treeKinds = TREE_MODELS.map(decorKind);
+    this.rockKinds = ROCK_MODELS.map(decorKind);
     this.looks = buildEnemyLooks(assets, enemyCapacity + CORPSE_CAP);
     this.lookCounts = this.looks.map(() => 0);
     for (const look of this.looks) {
@@ -164,41 +204,48 @@ export class WorldView {
 
   /** Yeni run: araziyi ve statik dekoru yeniden kur. */
   setWorld(world: World): void {
-    for (const m of [this.terrain, this.trees, this.rocks]) {
-      if (!m) continue;
-      this.root.remove(m);
-      m.geometry.dispose();
+    if (this.terrain) {
+      this.root.remove(this.terrain);
+      this.terrain.geometry.dispose();
+    }
+    for (const c of this.decor) {
+      this.root.remove(c.mesh);
+      c.mesh.dispose();
     }
     this.terrain = createTerrainMesh(world.terrain);
     this.root.add(this.terrain);
 
+    // Ağaçlar ve kayalar: sim engel konum/boyu aynı, görünüm Kenney varyantı.
     const o = world.obstacles;
-    let nTree = 0;
-    let nRock = 0;
-    for (let i = 0; i < o.count; i++) o.kind[i] === OBSTACLE_TREE ? nTree++ : nRock++;
-    const mat = new MeshLambertMaterial({ vertexColors: true, flatShading: true });
-    this.trees = new InstancedMesh(treeGeometry(), mat, Math.max(1, nTree));
-    this.rocks = new InstancedMesh(rockGeometry(), mat, Math.max(1, nRock));
-    let ti = 0;
-    let ri = 0;
+    const buckets = [...this.treeKinds, ...this.rockKinds].map(() => [] as number[]);
     for (let i = 0; i < o.count; i++) {
-      const s = o.scale[i];
-      pos.set(o.x[i], world.terrain.heightAt(o.x[i], o.z[i]) - 0.1, o.z[i]);
-      quat.setFromAxisAngle(UP, o.rotation[i]);
-      if (o.kind[i] === OBSTACLE_ROCK) scl.set(s, s * 0.9, s);
-      else scl.set(s, s, s);
-      m4.compose(pos, quat, scl);
-      if (o.kind[i] === OBSTACLE_TREE) this.trees.setMatrixAt(ti++, m4);
-      else this.rocks.setMatrixAt(ri++, m4);
+      const tree = o.kind[i] === OBSTACLE_TREE;
+      const k = tree
+        ? variant(i, this.treeKinds.length)
+        : this.treeKinds.length + variant(i, this.rockKinds.length);
+      buckets[k].push(i);
     }
-    this.trees.count = ti;
-    this.rocks.count = ri;
-    for (const m of [this.trees, this.rocks]) {
-      m.castShadow = this.shadows;
-      m.receiveShadow = this.shadows;
-      m.computeBoundingSphere();
-      this.root.add(m);
-    }
+    this.decor = buckets.map((idx, k) => {
+      const tree = k < this.treeKinds.length;
+      const kind = tree ? this.treeKinds[k] : this.rockKinds[k - this.treeKinds.length];
+      const mesh = new InstancedMesh(kind.geometry, this.decorMaterial, Math.max(1, idx.length));
+      // Sis ~165 m'de her şeyi örtüyor: daha uzağı çizme (gölge geçişi dahil).
+      const culled = new CulledInstances(mesh, 175);
+      for (const i of idx) {
+        const s = o.scale[i];
+        // Ağaç boyu sim ölçeğiyle büyür; kayanın genişliği çarpışma çapına eşit.
+        const f = tree ? (4.4 * s) / kind.height : (2 * o.radius[i] * 1.05) / kind.width;
+        pos.set(o.x[i], world.terrain.heightAt(o.x[i], o.z[i]) - 0.08, o.z[i]);
+        quat.setFromAxisAngle(UP, o.rotation[i]);
+        scl.set(f, tree ? f : f * (0.85 + (i % 5) * 0.08), f);
+        m4.compose(pos, quat, scl);
+        culled.add(m4);
+      }
+      mesh.castShadow = this.shadows;
+      mesh.receiveShadow = this.shadows;
+      this.root.add(mesh);
+      return culled;
+    });
     this.puffList.length = 0;
     this.corpses.length = 0;
     this.deathCursor = world.deathFx.written;
@@ -207,6 +254,7 @@ export class WorldView {
   }
 
   update(world: World, time: number, dt: number): void {
+    for (const c of this.decor) c.cull(world.player.x, world.player.z);
     this.updateEnemies(world, time, dt);
     this.updateGems(world, time);
     this.updateArrows(world);

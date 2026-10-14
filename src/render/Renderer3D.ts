@@ -1,13 +1,13 @@
 import {
-  ACESFilmicToneMapping,
-  Color,
   DirectionalLight,
   Fog,
   HemisphereLight,
+  NeutralToneMapping,
   PCFShadowMap,
   PerspectiveCamera,
   Scene,
   SRGBColorSpace,
+  Vector3,
   WebGLRenderer,
 } from 'three';
 import type { World } from '../sim/world/World';
@@ -18,10 +18,13 @@ import { HeroView } from './HeroView';
 import { PropsView } from './PropsView';
 import { PulseFx } from './PulseFx';
 import type { QualitySettings } from './Quality';
+import { Scatter } from './Scatter';
+import { HORIZON, Sky } from './Sky';
 import { WeaponFx } from './WeaponFx';
 import { WorldView } from './WorldView';
 
-const SKY = 0x9fd3ff;
+/** Güneşin geldiği yön (gölge kamerası ve gökyüzündeki parıltı aynı yönü kullanır). */
+const SUN_DIR = new Vector3(25, 45, 15).normalize();
 
 /** Three.js sahnesi: ışıklar, sis, kamera ve görünüm sınıflarının sahibi. */
 export class Renderer3D {
@@ -35,6 +38,8 @@ export class Renderer3D {
   private readonly weaponFx = new WeaponFx();
   private readonly props: PropsView;
   private readonly pulses = new PulseFx();
+  private readonly sky = new Sky(SUN_DIR);
+  private readonly scatter: Scatter;
   readonly damageNumbers = new DamageNumbers();
   private time = 0;
 
@@ -47,8 +52,9 @@ export class Renderer3D {
     this.renderer = new WebGLRenderer({ antialias: quality.antialias, powerPreference: 'high-performance' });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, quality.maxPixelRatio));
     this.renderer.outputColorSpace = SRGBColorSpace;
-    this.renderer.toneMapping = ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.05;
+    // Neutral: ACES çizgi film renklerini soldurur, bu doygunluğu korur.
+    this.renderer.toneMapping = NeutralToneMapping;
+    this.renderer.toneMappingExposure = 1;
     this.renderer.shadowMap.enabled = quality.shadows;
     this.renderer.shadowMap.type = PCFShadowMap;
     container.appendChild(this.renderer.domElement);
@@ -56,12 +62,13 @@ export class Renderer3D {
     this.camera = new PerspectiveCamera(60, 1, 0.1, 400);
     this.rig = new CameraRig(this.camera);
 
-    this.scene.background = new Color(SKY);
-    this.scene.fog = new Fog(SKY, 45, 150);
+    this.scene.background = HORIZON;
+    this.scene.fog = new Fog(HORIZON, 55, 165);
 
-    const hemi = new HemisphereLight(0xdff1ff, 0x4a6b3a, 1.6);
+    // Soğuk gök ışığı + sıcak güneş: gölgeler mavimsi, aydınlık yüzler sıcak kalır.
+    const hemi = new HemisphereLight(0xcfe6ff, 0x5b7a3c, 1.35);
     this.scene.add(hemi);
-    this.sun = new DirectionalLight(0xfff1d6, 2.4);
+    this.sun = new DirectionalLight(0xffe9c4, 2.7);
     this.sun.castShadow = quality.shadows;
     this.sun.shadow.mapSize.set(quality.shadowMapSize, quality.shadowMapSize);
     const sc = this.sun.shadow.camera;
@@ -75,9 +82,12 @@ export class Renderer3D {
     this.sun.shadow.normalBias = 0.03;
     this.scene.add(this.sun, this.sun.target);
 
+    this.scene.add(this.sky.root);
+    this.scatter = new Scatter(assets, quality.grassCount);
+    this.scene.add(this.scatter.root);
     this.worldView = new WorldView(enemyCapacity, quality.shadows, assets);
     this.hero = new HeroView(assets, quality.shadows);
-    this.props = new PropsView(quality.shadows);
+    this.props = new PropsView(quality.shadows, assets);
     this.scene.add(
       this.worldView.root,
       ...this.hero.objects,
@@ -102,6 +112,8 @@ export class Renderer3D {
 
   setWorld(world: World): void {
     this.worldView.setWorld(world);
+    this.scatter.build(world);
+    this.props.setWorld(world);
     this.weaponFx.reset(world);
     this.pulses.reset(world);
     this.damageNumbers.reset(world);
@@ -124,13 +136,15 @@ export class Renderer3D {
     else this.rig.update(p, world.terrain, dt);
 
     // Güneş (ve gölge kamerası) oyuncuyu takip eder.
-    this.sun.position.set(p.x + 25, p.y + 45, p.z + 15);
+    this.sun.position.set(p.x + SUN_DIR.x * 55, p.y + SUN_DIR.y * 55, p.z + SUN_DIR.z * 55);
     this.sun.target.position.set(p.x, p.y, p.z);
 
     this.hero.update(p, world.terrain, dt, this.time, world.gameOver);
     this.worldView.update(world, this.time, dt);
     this.weaponFx.update(world, this.time, dt);
     this.props.update(world, this.time);
+    this.scatter.update(this.time, p.x, p.z);
+    this.sky.update(this.camera.position, this.time);
     this.pulses.update(world, dt);
     this.damageNumbers.update(world, dt);
     this.renderer.render(this.scene, this.camera);

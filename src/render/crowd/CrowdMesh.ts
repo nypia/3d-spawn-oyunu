@@ -118,7 +118,7 @@ export function patchCrowdMaterial<M extends Material>(mat: M, bones: DataTextur
       .replace(
         '#include <emissivemap_fragment>',
         // flaş > 0: vuruş (beyaz), < 0: donma (buz mavisi).
-        '#include <emissivemap_fragment>\ntotalEmissiveRadiance += diffuseColor.rgb * vCrowdGlow * 1.3 + (vCrowdFlash > 0.0 ? vec3(vCrowdFlash) : vec3(0.15, 0.45, 0.9) * -vCrowdFlash);',
+        '#include <emissivemap_fragment>\ntotalEmissiveRadiance += diffuseColor.rgb * vCrowdGlow * 1.3 + (vCrowdFlash > 0.0 ? vec3(vCrowdFlash) : vec3(0.04, 0.16, 0.38) * -vCrowdFlash);',
       );
   };
   // Aynı onBeforeCompile kodu farklı dokularla kullanılıyor: program önbelleği için sabit anahtar yeter

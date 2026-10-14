@@ -57,25 +57,6 @@ export function build(parts: Part[]): BufferGeometry {
   return merged;
 }
 
-const WHITE = 0xffffff;
-
-export function treeGeometry(): BufferGeometry {
-  const trunk = new CylinderGeometry(0.18, 0.28, 1.4, 6).translate(0, 0.7, 0);
-  const crown1 = new ConeGeometry(1.3, 2.2, 7).translate(0, 2.2, 0);
-  const crown2 = new ConeGeometry(0.95, 1.7, 7).translate(0, 3.2, 0);
-  return build([
-    [trunk, 0x7a5232],
-    [crown1, 0x3f8f3a],
-    [crown2, 0x4fa548],
-  ]);
-}
-
-export function rockGeometry(): BufferGeometry {
-  const rock = new DodecahedronGeometry(1, 0);
-  rock.scale(1, 0.7, 1.1).translate(0, 0.35, 0);
-  return build([[rock, 0x8d8a85]]);
-}
-
 export function gemGeometry(): BufferGeometry {
   return new OctahedronGeometry(0.22, 0).scale(0.8, 1.2, 0.8);
 }
@@ -116,52 +97,6 @@ export function arrowGeometry(): BufferGeometry {
     [shaft, 0x8a5a33],
     [tip, 0xff4d6d],
   ]);
-}
-
-export function vaseGeometry(): BufferGeometry {
-  const body = new SphereGeometry(0.42, 8, 6).scale(1, 1.15, 1).translate(0, 0.45, 0);
-  const neck = new CylinderGeometry(0.18, 0.24, 0.25, 8).translate(0, 0.98, 0);
-  const lip = new CylinderGeometry(0.26, 0.22, 0.08, 8).translate(0, 1.12, 0);
-  const band = new CylinderGeometry(0.43, 0.43, 0.1, 8).translate(0, 0.55, 0);
-  return build([
-    [body, 0xc8743f],
-    [neck, 0xb5652f],
-    [lip, 0xd98a52],
-    [band, 0x6b3a1f],
-  ]);
-}
-
-export function chestGeometry(): BufferGeometry {
-  const body = new BoxGeometry(1.2, 0.65, 0.8).translate(0, 0.33, 0);
-  const lid = new CylinderGeometry(0.4, 0.4, 1.2, 8, 1, false, 0, Math.PI)
-    .rotateZ(Math.PI / 2)
-    .translate(0, 0.65, 0);
-  const band = new BoxGeometry(0.14, 0.7, 0.84).translate(0, 0.36, 0);
-  const lock = new BoxGeometry(0.2, 0.22, 0.06).translate(0, 0.55, 0.42);
-  return build([
-    [body, WHITE],
-    [lid, WHITE],
-    [band, 0xf2c94c],
-    [lock, 0xf2c94c],
-  ]);
-}
-
-export function shrineGeometry(): BufferGeometry {
-  const base = new CylinderGeometry(2.2, 2.4, 0.25, 10).translate(0, 0.12, 0);
-  const parts: Part[] = [[base, 0x9a958c]];
-  for (let k = 0; k < 4; k++) {
-    const a = (k * Math.PI) / 2 + Math.PI / 4;
-    parts.push([
-      new BoxGeometry(0.35, 1.8, 0.35).translate(Math.sin(a) * 1.7, 1.1, Math.cos(a) * 1.7),
-      0xb8b2a6,
-    ]);
-  }
-  parts.push([new OctahedronGeometry(0.45, 0).scale(1, 1.6, 1).translate(0, 1.6, 0), WHITE]);
-  return build(parts);
-}
-
-export function coinGeometry(): BufferGeometry {
-  return new CylinderGeometry(0.22, 0.22, 0.06, 10).rotateX(Math.PI / 2);
 }
 
 export function healGeometry(): BufferGeometry {
