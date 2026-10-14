@@ -58,6 +58,10 @@ export interface WeaponDef {
   behavior: WeaponBehavior;
   base: WeaponStats;
   levels: readonly WeaponLevelDelta[];
+  /** Evrimleşmiş silah: hangi temel silahtan geldiği (yuva ve "sahip olunan" kontrolü için). */
+  evolvesFrom?: string;
+  /** Evrimleşmiş silahın efekt rengi. */
+  tint?: number;
 }
 
 export const WEAPONS: readonly WeaponDef[] = [

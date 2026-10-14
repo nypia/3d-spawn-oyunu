@@ -10,6 +10,7 @@ export interface AppliedDelta {
 }
 
 export interface WeaponInstance {
+  /** Evrimde evrimleşmiş tanımla değişir. */
   def: WeaponDef;
   level: number;
   /** Alınan yükseltmeler (sırasıyla, nadirlik çarpanlarıyla). */

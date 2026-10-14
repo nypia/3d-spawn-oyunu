@@ -76,6 +76,8 @@ test('oyun açılır, oynanır ve seviye atlama çalışır', async ({ page }, t
   await page.getByTestId('guide').click();
   await expect(page.getByTestId('guide-panel')).toContainText('Anka Tüyü');
   await page.screenshot({ path: testInfo.outputPath('4-guide.png') });
+  await page.getByTestId('guide-evolutions').click();
+  await expect(page.getByTestId('guide-panel')).toContainText('Kutsal Asa');
   await page.getByTestId('guide-back').click();
   await expect(page.getByTestId('guide')).toBeVisible();
   await page.keyboard.press('Escape');

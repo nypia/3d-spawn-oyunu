@@ -171,6 +171,26 @@ body {
   font-size: 20px;
 }
 
+.slot.ready {
+  border-color: var(--r-legendary);
+  animation: slot-ready 1s ease-in-out infinite alternate;
+}
+
+@keyframes slot-ready {
+  from {
+    box-shadow: 0 0 4px rgba(255, 182, 39, 0.4);
+  }
+
+  to {
+    box-shadow: 0 0 16px rgba(255, 182, 39, 0.95);
+  }
+}
+
+.slot.evolved {
+  border-color: var(--r-legendary);
+  background: rgba(60, 40, 6, 0.75);
+}
+
 .slot.empty {
   background: rgba(10, 14, 26, 0.3);
   border: 2px dashed rgba(255, 255, 255, 0.22);
@@ -189,6 +209,10 @@ body {
   font-weight: 800;
   text-align: center;
   text-shadow: none;
+}
+
+.slot.evolved .slot-level {
+  background: var(--r-legendary);
 }
 
 .hp-bar {
@@ -465,6 +489,42 @@ kbd {
   font-size: 14px;
 }
 
+.card-hint {
+  color: var(--r-legendary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.evo-recipe {
+  color: var(--muted);
+  font-size: 22px;
+  letter-spacing: 2px;
+}
+
+.tabs {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin: 6px 0 4px;
+}
+
+.tab {
+  padding: 6px 14px;
+  border: 1px solid var(--panel-border);
+  border-radius: 999px;
+  background: var(--card);
+  color: var(--muted);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.tab.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+
 /* Rehber (duraklat ekranı) */
 .guide {
   width: min(680px, 100%);
@@ -528,6 +588,12 @@ kbd {
   font-size: 24px;
   width: 30px;
   text-align: center;
+}
+
+.guide-icon.wide {
+  width: 64px;
+  font-size: 20px;
+  white-space: nowrap;
 }
 
 .guide-text {

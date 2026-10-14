@@ -1,6 +1,8 @@
 import { BALANCE } from '../data/balance';
+import { EVOLUTION_BY_WEAPON } from '../data/evolutions';
 import { ITEMS } from '../data/items';
 import { SHRINE_BONUSES } from '../data/shrines';
+import { TOME_INDEX, TOMES } from '../data/tomes';
 import { DebugOverlay } from '../debug/DebugOverlay';
 import { detectQuality, isTouchDevice, type QualitySettings } from '../render/Quality';
 import { Renderer3D } from '../render/Renderer3D';
@@ -111,7 +113,8 @@ export class Game {
     const inp = this.input;
     for (const code of ['KeyE', 'Enter']) {
       inp.onKey(code, () => {
-        if (this.state === 'reward' && this.world.reward?.kind === 'item') this.takeReward(0);
+        const kind = this.world.reward?.kind;
+        if (this.state === 'reward' && (kind === 'item' || kind === 'evolution')) this.takeReward(0);
       });
     }
     inp.onKey('KeyR', () => {
@@ -224,6 +227,22 @@ export class Game {
           };
         }),
         (i) => this.takeReward(i),
+      );
+      return;
+    }
+    if (r.kind === 'evolution') {
+      const w = this.world.weapons[r.slot];
+      const evo = EVOLUTION_BY_WEAPON[w.def.id];
+      this.screens.showEvolution(
+        {
+          fromIcon: w.def.icon,
+          fromName: w.def.name,
+          tomeIcon: TOMES[TOME_INDEX[evo.tome]].icon,
+          icon: evo.def.icon,
+          name: evo.def.name,
+          description: evo.def.description,
+        },
+        () => this.takeReward(0),
       );
       return;
     }

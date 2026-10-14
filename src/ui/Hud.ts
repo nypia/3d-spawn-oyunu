@@ -85,6 +85,7 @@ export class Hud {
       hint = chest.free
         ? '📦 Ödül sandığı · ücretsiz, üstüne yürü'
         : `📦 Sandık · ${chest.price} altın${chest.affordable ? ', üstüne yürü' : ' (altın yetmiyor)'}`;
+      if (world.findEvolution() >= 0) hint += ' · ★ evrim hazır';
     }
     if (hint !== this.lastText.hint) {
       this.hint.classList.toggle('poor', !!chest && !chest.affordable);
@@ -98,7 +99,12 @@ export class Hud {
       world.itemCounts.join();
     if (key !== this.lastLoadoutKey) {
       this.lastLoadoutKey = key;
-      const weapons = world.weapons.map((w) => slot(w.def.icon, w.level, w.def.name));
+      const weapons = world.weapons.map((w) => {
+        if (w.def.evolvesFrom) return slot(w.def.icon, '★', w.def.name, 'evolved');
+        if (world.canEvolve(w))
+          return slot(w.def.icon, w.level, `${w.def.name}: evrime hazır, sandık aç!`, 'ready');
+        return slot(w.def.icon, w.level, w.def.name);
+      });
       const tomes = TOMES.flatMap((t, i) =>
         world.tomeLevels[i] > 0 ? [slot(t.icon, world.tomeLevels[i], t.name)] : [],
       );
@@ -131,8 +137,13 @@ export class Hud {
   }
 }
 
-function slot(icon: string, level: number, title: string): HTMLElement {
-  return h('div.slot', { title }, h('span.slot-icon', {}, icon), h('span.slot-level', {}, String(level)));
+function slot(icon: string, level: number | string, title: string, state = ''): HTMLElement {
+  return h(
+    `div.slot${state ? `.${state}` : ''}`,
+    { title },
+    h('span.slot-icon', {}, icon),
+    h('span.slot-level', {}, String(level)),
+  );
 }
 
 /** Dolu yuvaların ardına kesik çizgili boş yuvalar ekler: 4 silah + 4 kitap sınırı hep görünür. */

@@ -1,6 +1,7 @@
 import type { Rng } from '../../core/Rng';
 import { BALANCE } from '../../data/balance';
-import { TOMES, tomeValue } from '../../data/tomes';
+import { EVOLUTION_BY_WEAPON } from '../../data/evolutions';
+import { TOME_INDEX, TOMES, tomeValue } from '../../data/tomes';
 import { describeDelta, WEAPONS, weaponMaxLevel } from '../../data/weapons';
 import type { World } from '../world/World';
 import { RARITIES, type Rarity, rarityMult, rollRarity } from './Rarity';
@@ -19,6 +20,8 @@ export interface UpgradeView {
   /** Nadirliği olmayan kartlar (yeni silah, iyileşme) için null. */
   rarity: Rarity | null;
   rarityName: string;
+  /** Ek ipucu (maks seviye kartında evrim tarifi). */
+  hint?: string;
 }
 
 /** Yasaklama ve tekrar kontrolü için seçeneğin kimliği: "w:magicBolt", "t:power". */
@@ -66,7 +69,8 @@ export function rollUpgrades(
     if (!world.banished.has(key) && !exclude.has(key)) pool.push({ opt, weight });
   };
 
-  const ownedWeapons = new Set(world.weapons.map((w) => w.def.id));
+  // Evrimleşmiş silah, temel silahın yuvasını tutmaya devam eder.
+  const ownedWeapons = new Set(world.weapons.map((w) => w.def.evolvesFrom ?? w.def.id));
   for (const w of world.weapons) {
     if (w.level < weaponMaxLevel(w.def)) {
       add({ kind: 'weaponLevel', weapon: WEAPONS.indexOf(w.def), toLevel: w.level + 1, rarity: 0 }, 10);
@@ -120,7 +124,10 @@ export function describeUpgrade(opt: UpgradeOption, slots?: SlotUsage): UpgradeV
     }
     case 'weaponLevel': {
       const d = WEAPONS[opt.weapon];
+      const evo = EVOLUTION_BY_WEAPON[d.id];
+      const maxed = opt.toLevel >= weaponMaxLevel(d);
       return {
+        hint: maxed && evo ? `Maks! Evrim: ${TOMES[TOME_INDEX[evo.tome]].name} + sandık` : undefined,
         icon: d.icon,
         title: d.name,
         badge: `Sv. ${opt.toLevel - 1} → ${opt.toLevel}`,

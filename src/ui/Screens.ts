@@ -1,5 +1,8 @@
 import { BALANCE } from '../data/balance';
+import { EVOLUTIONS } from '../data/evolutions';
 import { ITEMS } from '../data/items';
+import { TOME_INDEX, TOMES } from '../data/tomes';
+import { WEAPON_INDEX, WEAPONS, weaponMaxLevel } from '../data/weapons';
 import { RARITIES } from '../sim/progression/Rarity';
 import type { SlotUsage, UpgradeView } from '../sim/progression/Upgrades';
 import type { World } from '../sim/world/World';
@@ -14,6 +17,17 @@ export interface ItemView {
   rarityName: string;
   owned: number;
 }
+
+export interface EvolutionView {
+  fromIcon: string;
+  fromName: string;
+  tomeIcon: string;
+  icon: string;
+  name: string;
+  description: string;
+}
+
+export type GuideTab = 'items' | 'evolutions';
 
 export interface ShrineView {
   icon: string;
@@ -107,6 +121,7 @@ export class Screens {
         h('span.card-desc', {}, o.description),
       );
       if (o.rarityName) card.append(h('span.card-rarity', {}, o.rarityName));
+      if (o.hint) card.append(h('span.card-hint', {}, `★ ${o.hint}`));
       card.addEventListener('click', () => actions.pick(i));
       if (charges.banishes > 0 && o.badge !== 'İYİLEŞME') {
         const ban = h(
@@ -172,6 +187,35 @@ export class Screens {
     this.show(h('div.panel.reward', {}, h('h2', {}, view.title), card, h('div.buttons', {}, take)));
   }
 
+  /** Sandıktan evrim: eski silah + kitap → yeni silah. */
+  showEvolution(view: EvolutionView, onTake: () => void): void {
+    const take = h(
+      'button.btn.btn-primary',
+      { 'data-testid': 'take' },
+      'EVRİMLEŞTİR',
+      h('span.keys-only', {}, ' (E)'),
+    );
+    take.addEventListener('click', onTake);
+    const card = h(
+      'div.card.item-card.evo-card',
+      { 'data-rarity': '3' },
+      h('span.evo-recipe', {}, `${view.fromIcon} + ${view.tomeIcon} →`),
+      h('span.card-icon', {}, view.icon),
+      h('span.card-title', {}, view.name),
+      h('span.card-desc', {}, view.description),
+      h('span.card-badge', {}, `★ ${view.fromName} evrimleşiyor`),
+    );
+    this.show(
+      h(
+        'div.panel.reward',
+        { 'data-testid': 'evolution' },
+        h('h2', {}, 'Evrim!'),
+        card,
+        h('div.buttons', {}, take),
+      ),
+    );
+  }
+
   /** Tapınak doldu: üç bonustan birini seç. */
   showShrine(options: ShrineView[], onPick: (i: number) => void): void {
     const cards = options.map((o, i) => {
@@ -209,38 +253,27 @@ export class Screens {
     this.show(h('div.panel', {}, h('h2', {}, 'Duraklatıldı'), h('div.buttons', {}, resume, guide, restart)));
   }
 
-  /** Rehber: sandık eşyaları nadirliğe göre gruplu; sahip olunanlar vurgulu. */
-  showGuide(world: World, onBack: () => void): void {
+  /** Rehber: eşyalar (nadirliğe göre gruplu) ve evrimler; sahip olunanlar vurgulu. */
+  showGuide(world: World, onBack: () => void, tab: GuideTab = 'items'): void {
     const back = h('button.btn.btn-primary', { 'data-testid': 'guide-back' }, '← Geri');
     back.addEventListener('click', onBack);
-    const groups = RARITIES.map((r, rarity) => {
-      const rows = ITEMS.flatMap((d, i) => {
-        if (d.rarity !== rarity) return [];
-        const owned = world.itemCounts[i];
-        return [
-          h(
-            `li.guide-row${owned > 0 ? '.owned' : ''}`,
-            {},
-            h('span.guide-icon', {}, d.icon),
-            h('span.guide-text', {}, h('b', {}, d.name), h('span', {}, d.description)),
-            owned > 0 ? h('span.guide-owned', {}, `×${owned}`) : '',
-          ),
-        ];
-      });
-      return h(
-        'section.guide-group',
-        { 'data-rarity': String(rarity) },
-        h('h3', {}, r.name),
-        h('ul', {}, ...rows),
+    const tabs = (['items', 'evolutions'] as const).map((t) => {
+      const b = h(
+        `button.tab${t === tab ? '.active' : ''}`,
+        { 'data-testid': `guide-${t}` },
+        t === 'items' ? '🎁 Eşyalar' : '★ Evrimler',
       );
+      b.addEventListener('click', () => this.showGuide(world, onBack, t));
+      return b;
     });
+    const body = tab === 'items' ? itemGuide(world) : evolutionGuide(world);
     this.show(
       h(
         'div.panel.guide',
         { 'data-testid': 'guide-panel' },
-        h('h2', {}, 'Rehber · Eşyalar'),
-        h('p.subtitle', {}, 'Sandıklardan çıkar. Nadirlik zarını Şans artırır.'),
-        h('div.guide-list', {}, ...groups),
+        h('h2', {}, 'Rehber'),
+        h('div.tabs', {}, ...tabs),
+        body,
         h('div.buttons', {}, back),
       ),
     );
@@ -274,5 +307,68 @@ function slotLine(slots: SlotUsage): HTMLElement {
     part('⚔️', 'Silah', slots.weapons, L.weaponSlots),
     ' · ',
     part('📖', 'Kitap', slots.tomes, L.tomeSlots),
+  );
+}
+
+function guideRow(
+  icon: string,
+  name: string,
+  desc: string,
+  mark: string,
+  highlight: boolean,
+  wideIcon = false,
+): HTMLElement {
+  return h(
+    `li.guide-row${highlight ? '.owned' : ''}`,
+    {},
+    h(`span.guide-icon${wideIcon ? '.wide' : ''}`, {}, icon),
+    h('span.guide-text', {}, h('b', {}, name), h('span', {}, desc)),
+    mark ? h('span.guide-owned', {}, mark) : '',
+  );
+}
+
+function itemGuide(world: World): HTMLElement {
+  const groups = RARITIES.map((r, rarity) => {
+    const rows = ITEMS.flatMap((d, i) => {
+      if (d.rarity !== rarity) return [];
+      const owned = world.itemCounts[i];
+      return [guideRow(d.icon, d.name, d.description, owned > 0 ? `×${owned}` : '', owned > 0)];
+    });
+    return h(
+      'section.guide-group',
+      { 'data-rarity': String(rarity) },
+      h('h3', {}, r.name),
+      h('ul', {}, ...rows),
+    );
+  });
+  return h(
+    'div.guide-list',
+    {},
+    h('p.note', {}, 'Sandıklardan çıkar. Nadirlik zarını Şans artırır.'),
+    ...groups,
+  );
+}
+
+function evolutionGuide(world: World): HTMLElement {
+  const rows = EVOLUTIONS.map((evo) => {
+    const base = WEAPONS[WEAPON_INDEX[evo.weapon]];
+    const tome = TOMES[TOME_INDEX[evo.tome]];
+    const w = world.weapons.find((x) => x.def.id === evo.weapon || x.def.id === evo.def.id);
+    const evolved = w?.def.id === evo.def.id;
+    const ready = !!w && !evolved && world.canEvolve(w);
+    return guideRow(
+      `${base.icon}→${evo.def.icon}`,
+      evo.def.name,
+      `${base.name} (Sv. ${weaponMaxLevel(base)}) + ${tome.icon} ${tome.name}`,
+      evolved ? '✓' : ready ? 'Hazır!' : '',
+      evolved || ready,
+      true,
+    );
+  });
+  return h(
+    'div.guide-list',
+    {},
+    h('p.note', {}, 'Silah maks seviyede ve eşleşen kitap sende varken açtığın sandık evrim verir.'),
+    h('section.guide-group', { 'data-rarity': '3' }, h('ul', {}, ...rows)),
   );
 }

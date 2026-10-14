@@ -17,6 +17,7 @@ import {
   RingGeometry,
   Vector3,
 } from 'three';
+import type { WeaponBehavior } from '../data/weapons';
 import { PROJ_AXE, PROJ_BOLT, PROJ_PELLET } from '../sim/combat/ProjectilePool';
 import { orbitRadius, weaponCount } from '../sim/weapons/Weapons';
 import type { World } from '../sim/world/World';
@@ -155,11 +156,29 @@ export class WeaponFx {
   }
 
   update(world: World, time: number, dt: number): void {
+    this.applyTints(world);
     this.updateProjectiles(world, time);
     this.updateOrbs(world, time);
     this.updateSwings(world, dt);
     this.updateBeams(world, dt);
     this.updateBlasts(world);
+  }
+
+  /** Evrimleşmiş silahlar kendi renginde görünür (her davranış tek bir silaha ait). */
+  private applyTints(world: World): void {
+    const basic = (m: InstancedMesh | Mesh, behavior: WeaponBehavior, base: number) => {
+      (m.material as MeshBasicMaterial).color.setHex(world.tintOf(behavior) || base);
+    };
+    basic(this.bolts, 'homingBolt', 0xaee9ff);
+    basic(this.pellets, 'cone', 0xffe08a);
+    basic(this.beams, 'chain', 0xd8f3ff);
+    basic(this.rings, 'mortar', 0xff5a3d);
+    basic(this.fills, 'mortar', 0xff5a3d);
+    for (const m of this.swingMeshes) basic(m, 'arc', 0xffffff);
+    const orb = world.tintOf('orbit');
+    (this.orbs.material as MeshLambertMaterial).emissive.setHex(orb ? orb & 0x7f7f7f : 0x2a1f66);
+    const axe = world.tintOf('boomerang');
+    (this.axes.material as MeshLambertMaterial).emissive.setHex(axe ? axe & 0x5f5f5f : 0x000000);
   }
 
   private updateProjectiles(world: World, time: number): void {

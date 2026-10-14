@@ -1,11 +1,12 @@
 import { Rng } from '../../core/Rng';
 import { BALANCE, xpToNext } from '../../data/balance';
 import { ARCHER, ELITE, ENEMIES, EXPLODER } from '../../data/enemies';
+import { EVOLUTION_BY_WEAPON } from '../../data/evolutions';
 import { ITEM_FX, ITEM_INDEX, ITEMS } from '../../data/items';
 import { SHRINE, SHRINE_BONUSES } from '../../data/shrines';
-import { TOMES, tomeValue } from '../../data/tomes';
+import { TOME_INDEX, TOMES, tomeValue } from '../../data/tomes';
 import { TORCH, TORCH_DROPS, type TorchDrop, torchDropWeights } from '../../data/torches';
-import { WEAPON_INDEX, WEAPONS } from '../../data/weapons';
+import { WEAPON_INDEX, WEAPONS, type WeaponBehavior, weaponMaxLevel } from '../../data/weapons';
 import { Blasts } from '../combat/Blasts';
 import { PF_GROUND_FOLLOW, PF_RETURNING, PF_RETURNS, ProjectilePool } from '../combat/ProjectilePool';
 import { EnemyPool } from '../enemies/EnemyPool';
@@ -26,7 +27,13 @@ import { rollUpgrades, type UpgradeOption, upgradeKey } from '../progression/Upg
 import { SpatialGrid } from '../spatial/SpatialGrid';
 import { Stats } from '../stats/Stats';
 import { Heightmap } from '../terrain/Heightmap';
-import { createWeapon, levelUpWeapon, updateWeapon, type WeaponInstance } from '../weapons/Weapons';
+import {
+  computeWeaponStats,
+  createWeapon,
+  levelUpWeapon,
+  updateWeapon,
+  type WeaponInstance,
+} from '../weapons/Weapons';
 import { EventRing } from './EventRing';
 import { CHEST, Interactables, SHRINE as SHRINE_KIND, VASE } from './Interactables';
 import { Obstacles } from './Obstacles';
@@ -48,7 +55,9 @@ export interface ShrineOption {
 
 export type Reward =
   | { kind: 'item'; item: number; rarity: Rarity }
-  | { kind: 'shrine'; options: ShrineOption[] };
+  | { kind: 'shrine'; options: ShrineOption[] }
+  /** Sandıktan evrim: `slot` = weapons dizisindeki silah. */
+  | { kind: 'evolution'; slot: number };
 
 export interface ProjectileSpawn {
   kind: number;
@@ -325,6 +334,7 @@ export class World {
     const r = this.reward;
     if (!r) return;
     if (r.kind === 'item') this.applyItem(r.item);
+    else if (r.kind === 'evolution') this.evolveWeapon(r.slot);
     else {
       const o = r.options[Math.min(choice, r.options.length - 1)];
       const def = SHRINE_BONUSES[o.bonus];
@@ -336,6 +346,35 @@ export class World {
       }
     }
     this.reward = null;
+  }
+
+  /** Silah evrime hazır mı: maks seviye, henüz evrimleşmemiş ve eşleşen kitap en az Sv.1. */
+  canEvolve(w: WeaponInstance): boolean {
+    const evo = EVOLUTION_BY_WEAPON[w.def.id];
+    return !!evo && w.level >= weaponMaxLevel(w.def) && this.tomeLevels[TOME_INDEX[evo.tome]] > 0;
+  }
+
+  /** Evrime hazır ilk silahın yuvası (yoksa −1). Sandık açılınca eşya yerine evrim verir. */
+  findEvolution(): number {
+    return this.weapons.findIndex((w) => this.canEvolve(w));
+  }
+
+  /** Silahı evrimleştirir: yeni taban stat'lar + alınmış yükseltmeler korunur. */
+  evolveWeapon(slot: number): void {
+    const w = this.weapons[slot];
+    if (!w || !this.canEvolve(w)) return;
+    const evo = EVOLUTION_BY_WEAPON[w.def.id];
+    w.def = evo.def;
+    w.stats = computeWeaponStats(evo.def, w.applied);
+    w.timer = 0;
+    const p = this.player;
+    this.pulseFx.push(p.x, p.y, p.z, 6, PULSE_HOLY);
+  }
+
+  /** Render için: bu davranıştaki silahın efekt rengi (evrimleşmediyse 0). */
+  tintOf(behavior: WeaponBehavior): number {
+    for (const w of this.weapons) if (w.def.behavior === behavior) return w.def.tint ?? 0;
+    return 0;
   }
 
   /** Tapınak için tekrarsız, nadirlik zarlı bonus seçenekleri. */
@@ -558,8 +597,12 @@ export class World {
         it.used[i] = 1;
         this.chestsOpened++;
         this.breakFx.push(it.x[i], y, it.z[i], CHEST);
-        const { item, rarity } = this.rollItem();
-        this.reward = { kind: 'item', item, rarity };
+        const slot = this.findEvolution();
+        if (slot >= 0) this.reward = { kind: 'evolution', slot };
+        else {
+          const { item, rarity } = this.rollItem();
+          this.reward = { kind: 'item', item, rarity };
+        }
       } else if (it.kind[i] === SHRINE_KIND) {
         // İçinde durdukça dolar, çıkınca yavaşça boşalır.
         if (level && d2 < SHRINE.radius * SHRINE.radius) {

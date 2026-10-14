@@ -93,6 +93,7 @@ export class WorldView {
   private readonly puffs: InstancedMesh;
   private readonly aura: Group;
   private readonly auraRing: Mesh;
+  private readonly auraDisc: Mesh;
   private readonly puffList: Puff[] = [];
   private deathCursor = 0;
   private blastCursor = 0;
@@ -135,7 +136,7 @@ export class WorldView {
     this.puffs.setColorAt(0, WHITE);
 
     this.aura = new Group();
-    const disc = new Mesh(
+    this.auraDisc = new Mesh(
       new CircleGeometry(1, 40).rotateX(-Math.PI / 2),
       new MeshBasicMaterial({ color: 0xff7a2a, transparent: true, opacity: 0.16, depthWrite: false }),
     );
@@ -149,7 +150,7 @@ export class WorldView {
         blending: AdditiveBlending,
       }),
     );
-    this.aura.add(disc, this.auraRing);
+    this.aura.add(this.auraDisc, this.auraRing);
     this.aura.visible = false;
 
     this.arrows = instanced(
@@ -216,6 +217,10 @@ export class WorldView {
       this.aura.position.set(p.x, world.terrain.heightAt(p.x, p.z) + 0.08, p.z);
       const pulse = 1 + Math.sin(time * 6) * 0.03;
       this.aura.scale.setScalar(world.auraRadius * pulse);
+      // Cehennem Halesi (evrim) kendi renginde.
+      const tint = world.tintOf('aura');
+      (this.auraDisc.material as MeshBasicMaterial).color.setHex(tint || 0xff7a2a);
+      (this.auraRing.material as MeshBasicMaterial).color.setHex(tint || 0xffb04a);
       this.auraRing.rotation.y = time * 0.8;
     }
   }
