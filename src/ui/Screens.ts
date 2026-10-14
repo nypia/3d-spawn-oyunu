@@ -1,4 +1,5 @@
-import type { UpgradeView } from '../sim/progression/Upgrades';
+import { BALANCE } from '../data/balance';
+import type { SlotUsage, UpgradeView } from '../sim/progression/Upgrades';
 import type { World } from '../sim/world/World';
 import { formatTime, h } from './dom';
 
@@ -86,7 +87,13 @@ export class Screens {
     this.show(panel);
   }
 
-  showLevelUp(level: number, options: UpgradeView[], actions: LevelUpActions, charges: LevelUpCharges): void {
+  showLevelUp(
+    level: number,
+    options: UpgradeView[],
+    slots: SlotUsage,
+    actions: LevelUpActions,
+    charges: LevelUpCharges,
+  ): void {
     const cards = options.map((o, i) => {
       const card = h(
         'button.card',
@@ -134,6 +141,7 @@ export class Screens {
         {},
         h('h2', {}, `Seviye ${level}!`),
         h('p.subtitle', {}, 'Bir yükseltme seç', h('span.keys-only', {}, ` (1–${options.length})`)),
+        slotLine(slots),
         h('div.cards', {}, ...cards),
         h('div.buttons', {}, reroll, skip),
         banInfo,
@@ -210,4 +218,18 @@ export class Screens {
     );
     this.show(h('div.panel.gameover', {}, h('h2', {}, 'Öldün!'), stats, again));
   }
+}
+
+/** "⚔️ Silah 3/4 · 📖 Kitap 2/4": dolu yuvalar; dolunca yalnızca sahip olunanlar güçlenir. */
+function slotLine(slots: SlotUsage): HTMLElement {
+  const L = BALANCE.levelUp;
+  const part = (icon: string, name: string, used: number, max: number) =>
+    h(`span.slot-count${used >= max ? '.full' : ''}`, {}, `${icon} ${name} ${used}/${max}`);
+  return h(
+    'p.slot-line',
+    { 'data-testid': 'slot-line' },
+    part('⚔️', 'Silah', slots.weapons, L.weaponSlots),
+    ' · ',
+    part('📖', 'Kitap', slots.tomes, L.tomeSlots),
+  );
 }

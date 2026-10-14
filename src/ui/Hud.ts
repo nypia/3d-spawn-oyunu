@@ -1,3 +1,4 @@
+import { BALANCE } from '../data/balance';
 import { ITEMS } from '../data/items';
 import { TOMES } from '../data/tomes';
 import type { World } from '../sim/world/World';
@@ -76,14 +77,20 @@ export class Hud {
       world.itemCounts.join();
     if (key !== this.lastLoadoutKey) {
       this.lastLoadoutKey = key;
+      const weapons = world.weapons.map((w) => slot(w.def.icon, w.level, w.def.name));
+      const tomes = TOMES.flatMap((t, i) =>
+        world.tomeLevels[i] > 0 ? [slot(t.icon, world.tomeLevels[i], t.name)] : [],
+      );
       this.loadout.replaceChildren(
-        h('div.loadout-row', {}, ...world.weapons.map((w) => slot(w.def.icon, w.level, w.def.name))),
         h(
           'div.loadout-row',
-          {},
-          ...TOMES.flatMap((t, i) =>
-            world.tomeLevels[i] > 0 ? [slot(t.icon, world.tomeLevels[i], t.name)] : [],
-          ),
+          { 'data-testid': 'weapon-slots' },
+          ...padSlots(weapons, BALANCE.levelUp.weaponSlots, 'Boş silah yuvası'),
+        ),
+        h(
+          'div.loadout-row',
+          { 'data-testid': 'tome-slots' },
+          ...padSlots(tomes, BALANCE.levelUp.tomeSlots, 'Boş kitap yuvası'),
         ),
         h(
           'div.loadout-row.items',
@@ -105,4 +112,11 @@ export class Hud {
 
 function slot(icon: string, level: number, title: string): HTMLElement {
   return h('div.slot', { title }, h('span.slot-icon', {}, icon), h('span.slot-level', {}, String(level)));
+}
+
+/** Dolu yuvaların ardına kesik çizgili boş yuvalar ekler: 4 silah + 4 kitap sınırı hep görünür. */
+function padSlots(filled: HTMLElement[], max: number, title: string): HTMLElement[] {
+  const out = [...filled];
+  while (out.length < max) out.push(h('div.slot.empty', { title }));
+  return out;
 }

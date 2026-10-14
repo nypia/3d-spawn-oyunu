@@ -403,12 +403,28 @@ export class World {
       case PICKUP_HEAL:
         p.hp = Math.min(p.maxHp, p.hp + BALANCE.loot.healAmount);
         break;
-      case PICKUP_MAGNET: {
-        // Haritadaki tüm XP taşlarını çek.
-        const gm = this.gems;
-        for (let j = 0; j < gm.count; j++) if (gm.pull[j] === 0) gm.pull[j] = XB.magnetBaseSpeed;
+      case PICKUP_MAGNET:
+        this.attract();
         break;
-      }
+    }
+  }
+
+  /**
+   * Oyuncuya `radius` içindeki XP taşlarını ve altınları çeker (mıknatıs). Varsayılan: tüm harita.
+   * Can ve diğer özel pickup'lar çekilmez; oyuncu onları bilerek almalı.
+   */
+  attract(radius = Number.POSITIVE_INFINITY): void {
+    const p = this.player;
+    const r2 = radius * radius;
+    const gm = this.gems;
+    for (let j = 0; j < gm.count; j++) {
+      if (gm.pull[j] === 0 && (gm.x[j] - p.x) ** 2 + (gm.z[j] - p.z) ** 2 <= r2)
+        gm.pull[j] = XB.magnetBaseSpeed;
+    }
+    const pk = this.pickups;
+    for (let j = 0; j < pk.count; j++) {
+      if (pk.pull[j] !== 0 || pk.kind[j] !== PICKUP_GOLD) continue;
+      if ((pk.x[j] - p.x) ** 2 + (pk.z[j] - p.z) ** 2 <= r2) pk.pull[j] = XB.magnetBaseSpeed;
     }
   }
 
@@ -683,6 +699,7 @@ export class World {
       this.eliteKills++;
       this.interactables.add(CHEST, x, z, this.rng.range(0, Math.PI * 2), true);
       for (let c = 0; c < 3; c++) this.dropPickup(PICKUP_GOLD, x, gy, z, 2);
+      if (this.rng.chance(BALANCE.loot.eliteMagnetChance)) this.dropPickup(PICKUP_MAGNET, x, gy + 0.1, z, 1);
     } else if (this.rng.chance(BALANCE.loot.goldDropChance)) {
       this.dropPickup(PICKUP_GOLD, x, gy, z, 1);
     }

@@ -58,6 +58,8 @@ test('oyun açılır, oynanır ve seviye atlama çalışır', async ({ page }, t
   await page.keyboard.press('KeyK');
   await expect.poll(async () => (await gameState(page)).state).toBe('levelup');
   await expect(page.getByTestId('card-0')).toBeVisible();
+  await expect(page.getByTestId('slot-line')).toContainText('Silah 1/4');
+  await expect(page.getByTestId('weapon-slots').locator('.slot')).toHaveCount(4);
   // Yenile: kartlar yeniden çekilir, ekran açık kalır.
   await page.getByTestId('reroll').click();
   await expect(page.getByTestId('reroll')).toContainText('(1)');

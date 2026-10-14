@@ -1,7 +1,9 @@
 import {
+  AdditiveBlending,
   type BufferGeometry,
   CircleGeometry,
   Color,
+  DoubleSide,
   DynamicDrawUsage,
   Group,
   InstancedMesh,
@@ -17,6 +19,7 @@ import { PICKUP_GOLD, PICKUP_HEAL, PICKUP_MAGNET } from '../sim/pickups/PickupPo
 import { CHEST, SHRINE, VASE } from '../sim/world/Interactables';
 import type { World } from '../sim/world/World';
 import {
+  beamGeometry,
   chestGeometry,
   coinGeometry,
   healGeometry,
@@ -35,6 +38,11 @@ const CHEST_WOOD = new Color(0x8a5a33);
 const CHEST_GOLD = new Color(1.6, 1.25, 0.45);
 const SHRINE_USED = new Color(0.45, 0.45, 0.5);
 const SHRINE_GLOW = new Color(0x7fe3ff);
+const BEAM_CAP = 32;
+/** Işık sütunu alan nadir pickup'lar ve renkleri. */
+const BEAM_COLORS: Partial<Record<number, Color>> = {
+  [PICKUP_MAGNET]: new Color(0xff3b3b),
+};
 
 function instanced(geo: BufferGeometry, cap: number, shadows: boolean, emissive = 0x000000) {
   const m = new InstancedMesh(
@@ -59,6 +67,8 @@ export class PropsView {
   private readonly coins: InstancedMesh;
   private readonly heals: InstancedMesh;
   private readonly magnets: InstancedMesh;
+  /** Nadir pickup'ların üstündeki ışık sütunları (uzaktan görünsün). */
+  private readonly beams: InstancedMesh;
   /** Tapınak alanı halkası ve dolum diski. */
   private readonly shrineRings: InstancedMesh;
   private readonly shrineFills: InstancedMesh;
@@ -73,6 +83,19 @@ export class PropsView {
     this.coins.material = new MeshLambertMaterial({ color: 0xffcf33, emissive: 0x6b4a00, flatShading: true });
     this.heals = instanced(healGeometry(), 64, false, 0x301008);
     this.magnets = instanced(magnetGeometry(), 32, false, 0x300000);
+    this.beams = new InstancedMesh(
+      beamGeometry(),
+      new MeshBasicMaterial({
+        vertexColors: true,
+        transparent: true,
+        opacity: 0.42,
+        blending: AdditiveBlending,
+        depthWrite: false,
+        side: DoubleSide,
+      }),
+      BEAM_CAP,
+    );
+    this.beams.setColorAt(0, WHITE);
     const flat = { color: 0x7fe3ff, transparent: true, depthWrite: false };
     this.shrineRings = new InstancedMesh(
       new RingGeometry(0.93, 1, 48).rotateX(-Math.PI / 2),
@@ -84,7 +107,7 @@ export class PropsView {
       new MeshBasicMaterial({ ...flat, opacity: 0.22 }),
       16,
     );
-    for (const m of [this.shrineRings, this.shrineFills]) {
+    for (const m of [this.shrineRings, this.shrineFills, this.beams]) {
       m.instanceMatrix.setUsage(DynamicDrawUsage);
       m.frustumCulled = false;
       m.count = 0;
@@ -96,6 +119,7 @@ export class PropsView {
       this.coins,
       this.heals,
       this.magnets,
+      this.beams,
       this.shrineRings,
       this.shrineFills,
     );
@@ -159,6 +183,7 @@ export class PropsView {
     let a = 0;
     let b = 0;
     let c = 0;
+    let nb = 0;
     for (let i = 0; i < pk.count; i++) {
       if (pk.dead[i]) continue;
       const bob = pk.pull[i] > 0 ? 0 : Math.sin(time * 3 + i) * 0.08;
@@ -177,10 +202,23 @@ export class PropsView {
           this.magnets.setMatrixAt(c++, m4);
           break;
       }
+      const beam = BEAM_COLORS[pk.kind[i]];
+      if (beam && pk.pull[i] === 0 && nb < BEAM_CAP) {
+        const w = 1 + Math.sin(time * 4 + i) * 0.15;
+        pos.y = pk.y[i] - 0.3;
+        quat.identity();
+        scl.set(w, 1, w);
+        m4.compose(pos, quat, scl);
+        this.beams.setMatrixAt(nb, m4);
+        this.beams.setColorAt(nb, beam);
+        nb++;
+      }
     }
     this.coins.count = a;
     this.heals.count = b;
     this.magnets.count = c;
-    for (const m of [this.coins, this.heals, this.magnets]) m.instanceMatrix.needsUpdate = true;
+    this.beams.count = nb;
+    for (const m of [this.coins, this.heals, this.magnets, this.beams]) m.instanceMatrix.needsUpdate = true;
+    if (this.beams.instanceColor) this.beams.instanceColor.needsUpdate = true;
   }
 }

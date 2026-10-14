@@ -285,3 +285,23 @@ export function magnetGeometry(): BufferGeometry {
     [tipR, 0xeeeeee],
   ]);
 }
+
+/**
+ * Nadir pickup'ların üstündeki ışık sütunu: açık silindir, alttan üste beyazdan siyaha solar.
+ * Toplamalı (additive) karışımla siyah görünmez → üst uç yumuşakça kaybolur. Renk instance renginden gelir.
+ */
+export function beamGeometry(height = 7, radius = 0.22): BufferGeometry {
+  const g = new CylinderGeometry(radius, radius * 0.6, height, 10, 4, true).translate(0, height / 2, 0);
+  const pos = g.getAttribute('position');
+  const c = new Float32Array(pos.count * 3);
+  for (let i = 0; i < pos.count; i++) {
+    const v = (1 - pos.getY(i) / height) ** 1.5;
+    c[i * 3] = v;
+    c[i * 3 + 1] = v;
+    c[i * 3 + 2] = v;
+  }
+  g.setAttribute('color', new Float32BufferAttribute(c, 3));
+  g.deleteAttribute('uv');
+  g.deleteAttribute('normal');
+  return g;
+}

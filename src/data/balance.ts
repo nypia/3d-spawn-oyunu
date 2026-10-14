@@ -87,7 +87,9 @@ export const BALANCE = {
     vaseGoldMin: 1,
     vaseGoldMax: 4,
     vaseHealChance: 0.1,
-    vaseMagnetChance: 0.03,
+    vaseMagnetChance: 0.08,
+    /** Elitler yarı yarıya mıknatıs düşürür. */
+    eliteMagnetChance: 0.5,
     healAmount: 25,
     pickupCapacity: 400,
   },

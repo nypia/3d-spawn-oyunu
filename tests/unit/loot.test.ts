@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { BALANCE } from '../../src/data/balance';
 import { ENEMY_INDEX } from '../../src/data/enemies';
 import { ITEM_INDEX } from '../../src/data/items';
-import { PICKUP_GOLD, PICKUP_MAGNET } from '../../src/sim/pickups/PickupPool';
+import { PICKUP_GOLD, PICKUP_HEAL, PICKUP_MAGNET } from '../../src/sim/pickups/PickupPool';
 import { NO_INPUT } from '../../src/sim/player/Player';
 import { CHEST, VASE } from '../../src/sim/world/Interactables';
 import { World } from '../../src/sim/world/World';
@@ -97,6 +97,41 @@ describe('ganimet', () => {
     for (let t = 0; t < 4; t += DT) w.step(NO_INPUT, DT);
     expect(w.gems.count).toBe(0);
     expect(w.xp).toBeGreaterThan(0);
+  });
+
+  it('mıknatıs uzaktaki altını da çeker, canı çekmez', () => {
+    const w = arena();
+    const p = w.player;
+    w.pickups.add(PICKUP_GOLD, p.x + 40, p.y + 0.3, p.z, 5);
+    w.pickups.add(PICKUP_HEAL, p.x - 40, p.y + 0.3, p.z, 1);
+    w.dropPickup(PICKUP_MAGNET, p.x, p.y + 0.5, p.z, 1);
+    for (let t = 0; t < 4; t += DT) w.step(NO_INPUT, DT);
+    expect(w.gold).toBeGreaterThanOrEqual(5);
+    expect(w.pickups.count).toBe(1);
+    expect(w.pickups.kind[0]).toBe(PICKUP_HEAL);
+  });
+
+  it('attract yalnızca yarıçap içindekileri çeker', () => {
+    const w = arena();
+    const p = w.player;
+    w.gems.add(p.x + 10, p.y, p.z, 1, p.x, p.z);
+    w.gems.add(p.x + 30, p.y, p.z, 1, p.x, p.z);
+    w.attract(15);
+    expect(w.gems.pull[0]).toBeGreaterThan(0);
+    expect(w.gems.pull[1]).toBe(0);
+  });
+
+  it('elitler sık sık mıknatıs düşürür', () => {
+    const w = arena();
+    for (let k = 0; k < 40; k++) {
+      const i = w.spawnEnemy(ENEMY_INDEX.skeleton, w.player.x + 20, w.player.z + k, true);
+      w.damageEnemy(i, 1e7, 0, 0);
+      w.enemies.removeDead();
+    }
+    let magnets = 0;
+    for (let i = 0; i < w.pickups.count; i++) if (w.pickups.kind[i] === PICKUP_MAGNET) magnets++;
+    expect(magnets).toBeGreaterThan(10);
+    expect(magnets).toBeLessThan(32);
   });
 });
 

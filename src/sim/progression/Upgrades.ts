@@ -34,6 +34,16 @@ export function upgradeKey(opt: UpgradeOption): string {
   }
 }
 
+export interface SlotUsage {
+  weapons: number;
+  tomes: number;
+}
+
+/** Dolu silah ve kitap yuvası sayısı (sınır: `BALANCE.levelUp.weaponSlots/tomeSlots`). */
+export function slotUsage(world: World): SlotUsage {
+  return { weapons: world.weapons.length, tomes: world.tomeLevels.filter((l) => l > 0).length };
+}
+
 /** Şans yüksekse 4. kart açılır. */
 export function choiceCount(luck: number): number {
   return BALANCE.levelUp.choices + (luck >= 0.45 ? 1 : 0);
@@ -69,7 +79,7 @@ export function rollUpgrades(
   }
 
   const ownedTomes = world.tomeLevels;
-  const tomeCount = ownedTomes.filter((l) => l > 0).length;
+  const tomeCount = slotUsage(world).tomes;
   TOMES.forEach((def, i) => {
     const lvl = ownedTomes[i];
     if (lvl > 0 && lvl < def.maxLevel) {
@@ -93,14 +103,16 @@ export function rollUpgrades(
   return result;
 }
 
-export function describeUpgrade(opt: UpgradeOption): UpgradeView {
+/** `slots` verilirse yeni silah/kitap rozetinde kaçıncı yuvaya gireceği yazar ("YENİ SİLAH · 3/4"). */
+export function describeUpgrade(opt: UpgradeOption, slots?: SlotUsage): UpgradeView {
+  const L = BALANCE.levelUp;
   switch (opt.kind) {
     case 'weaponNew': {
       const d = WEAPONS[opt.weapon];
       return {
         icon: d.icon,
         title: d.name,
-        badge: 'YENİ SİLAH',
+        badge: slots ? `YENİ SİLAH · ${slots.weapons + 1}/${L.weaponSlots}` : 'YENİ SİLAH',
         description: d.description,
         rarity: null,
         rarityName: '',
@@ -122,7 +134,12 @@ export function describeUpgrade(opt: UpgradeOption): UpgradeView {
       return {
         icon: d.icon,
         title: d.name,
-        badge: opt.toLevel === 1 ? 'YENİ KİTAP' : `Sv. ${opt.toLevel - 1} → ${opt.toLevel}`,
+        badge:
+          opt.toLevel > 1
+            ? `Sv. ${opt.toLevel - 1} → ${opt.toLevel}`
+            : slots
+              ? `YENİ KİTAP · ${slots.tomes + 1}/${L.tomeSlots}`
+              : 'YENİ KİTAP',
         description: d.describe(tomeValue(d, rarityMult(opt.rarity))),
         rarity: opt.rarity,
         rarityName: RARITIES[opt.rarity].name,

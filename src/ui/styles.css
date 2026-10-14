@@ -126,6 +126,11 @@ body {
   font-size: 20px;
 }
 
+.slot.empty {
+  background: rgba(10, 14, 26, 0.3);
+  border: 2px dashed rgba(255, 255, 255, 0.22);
+}
+
 .slot-level {
   position: absolute;
   right: -4px;
@@ -388,6 +393,17 @@ kbd {
 .card-title {
   font-size: 17px;
   font-weight: 800;
+}
+
+.slot-line {
+  margin: -6px 0 14px;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.slot-count.full {
+  color: var(--accent);
 }
 
 .card-badge {
@@ -697,6 +713,11 @@ body.touch .hp-bar {
 
   .subtitle {
     margin: 2px 0 8px;
+  }
+
+  .slot-line {
+    margin: -4px 0 8px;
+    font-size: 13px;
   }
 
   .lead {

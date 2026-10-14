@@ -6,7 +6,7 @@ import { detectQuality, isTouchDevice, type QualitySettings } from '../render/Qu
 import { Renderer3D } from '../render/Renderer3D';
 import type { PlayerInput } from '../sim/player/Player';
 import { RARITIES } from '../sim/progression/Rarity';
-import { describeUpgrade } from '../sim/progression/Upgrades';
+import { describeUpgrade, slotUsage } from '../sim/progression/Upgrades';
 import { World } from '../sim/world/World';
 import { Hud } from '../ui/Hud';
 import { Screens } from '../ui/Screens';
@@ -185,9 +185,11 @@ export class Game {
     this.input.exitLock();
     const w = this.world;
     const offer = w.offer ?? [];
+    const slots = slotUsage(w);
     this.screens.showLevelUp(
       w.level - w.pendingLevelUps + 1,
-      offer.map(describeUpgrade),
+      offer.map((o) => describeUpgrade(o, slots)),
+      slots,
       {
         pick: (i) => this.pick(i),
         banish: (i) => {
