@@ -62,17 +62,26 @@ export const BALANCE = {
     ringMin: 26,
     ringMax: 34,
     despawnDistance: 58,
-    /** Saniye başına kredi: a + b·dk + c·dk² */
-    creditA: 0.9,
-    creditB: 0.85,
-    creditC: 0.12,
+    /** Saniye başına kredi: a + b·dk + c·dk² (dk = çizelge dakikası). */
+    creditA: 1,
+    creditB: 1.2,
+    creditC: 0.08,
     maxStoredCredit: 40,
-    hpPerMinute: 0.16,
-    damagePerMinute: 0.08,
-    /** Kuşatma halkası olayı aralığı (s), boyutu (a + b·dk düşman) ve yarıçapı (m). */
-    ringEventInterval: 60,
-    ringBase: 12,
-    ringPerMinute: 5,
+    /** Düşman canı: 1 + a·dk + b·dk² (20. dakikada ×15). */
+    hpA: 0.1,
+    hpB: 0.03,
+    /** Düşman hasarı: 1 + a·dk + b·dk². */
+    damageA: 0.06,
+    damageB: 0.004,
+    /** Düşman hızı: dakikada +%1, en fazla ×1.2; atılmalar hariç mutlak üst sınır (m/s). */
+    speedPerMinute: 0.01,
+    speedMax: 1.2,
+    maxEnemySpeed: 8.5,
+    /** Temalı olaylar sınırı bu kadar aşabilir (kalabalık anlarında da gelsinler). */
+    eventOverflow: 1.15,
+    /** Bu kadar geç kalmış olay atlanır (hata ayıklama zaman atlamaları). */
+    staleEvent: 5,
+    /** Çember olaylarının varsayılan yarıçapı (m). */
     ringRadius: 20,
   },
 

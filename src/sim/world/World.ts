@@ -1,6 +1,6 @@
 import { Rng } from '../../core/Rng';
 import { BALANCE, xpToNext } from '../../data/balance';
-import { ARCHER, ELITE, ENEMIES, EXPLODER } from '../../data/enemies';
+import { ELITE, ENEMIES, EXPLODER, type RangedParams, REGULAR_TYPES, SHOT_ORB } from '../../data/enemies';
 import { EVOLUTION_BY_WEAPON } from '../../data/evolutions';
 import { ITEM_FX, ITEM_INDEX, ITEMS } from '../../data/items';
 import { SHRINE, SHRINE_BONUSES } from '../../data/shrines';
@@ -58,6 +58,25 @@ export type Reward =
   | { kind: 'shrine'; options: ShrineOption[] }
   /** Sandıktan evrim: `slot` = weapons dizisindeki silah. */
   | { kind: 'evolution'; slot: number };
+
+/** spawnEnemy ek seçenekleri (boss, çağrılan, goblin). */
+export interface SpawnOptions {
+  /** Ek boy çarpanı (tanımın `scale`'i ve elit çarpanıyla çarpılır). */
+  scale?: number;
+  /** Ek can çarpanı. */
+  hpMul?: number;
+  /** EF_* bayrakları. */
+  flags?: number;
+}
+
+/** Paktların düşmanlara ve oyuncuya uyguladığı kalıcı çarpanlar. */
+export interface WorldMods {
+  enemyHp: number;
+  enemyDamage: number;
+  enemySpeed: number;
+  damageTaken: number;
+  healing: number;
+}
 
 export interface ProjectileSpawn {
   kind: number;
@@ -128,6 +147,8 @@ export class World {
   readonly pulseFx = new EventRing(16, 5);
   /** Toplama (ışıltı): x,y,z,tür (COLLECT_GEM ya da 1+PICKUP_*),değer */
   readonly collectFx = new EventRing(64, 5);
+  /** HUD duyuruları: tür (ANN_*), değer, ek */
+  readonly announceFx = new EventRing(16, 3);
   readonly blasts = new Blasts(48);
 
   enemyCap: number;
@@ -135,6 +156,12 @@ export class World {
 
   time = 0;
   tick = 0;
+  /** Kan Ayı döngüsü (1 = ilk gün) ve başladığı an. */
+  cycle = 1;
+  cycleStart = 0;
+  readonly mods: WorldMods = { enemyHp: 1, enemyDamage: 1, enemySpeed: 1, damageTaken: 1, healing: 1 };
+  /** Isabet sorgularına eklenen pay: en büyük düşman yarıçapı (büyük gövdeler ızgarada kaçmasın). */
+  hitPad = 0.8;
   kills = 0;
   level = 1;
   xp = 0;
@@ -461,7 +488,7 @@ export class World {
       );
       return 0;
     }
-    return this.player.takeDamage(amount, this.stats.get('armor'));
+    return this.player.takeDamage(amount * this.mods.damageTaken, this.stats.get('armor'));
   }
 
   dropPickup(kind: number, x: number, y: number, z: number, value: number): void {
@@ -666,28 +693,34 @@ export class World {
 
   // ---------------------------------------------------------------- Düşmanlar
 
-  spawnEnemy(type: number, x: number, z: number, elite = false): number {
+  spawnEnemy(type: number, x: number, z: number, elite = false, opts?: SpawnOptions): number {
     const d = ENEMIES[type];
     const e = this.enemies;
     const i = e.add(type);
     if (i < 0) return -1;
-    const hpMul = this.director.hpMultiplier(this.time) * (elite ? ELITE.hp : 1);
-    const scale = elite ? ELITE.scale : 1;
+    const dir = this.director;
+    const t = this.time;
+    const c = this.cycle;
+    const m = this.mods;
+    const hpMul = dir.hpMultiplier(t, c) * m.enemyHp * (opts?.hpMul ?? 1) * (elite ? ELITE.hp : 1);
+    const scale = d.scale * (opts?.scale ?? 1) * (elite ? ELITE.scale : 1);
+    const speed = d.speed * dir.speedMultiplier(t, c) * m.enemySpeed * this.rng.range(0.88, 1.12);
     e.x[i] = x;
     e.z[i] = z;
     e.y[i] = this.terrain.heightAt(x, z);
     e.hp[i] = e.maxHp[i] = d.hp * hpMul;
-    e.damage[i] = d.damage * this.director.damageMultiplier(this.time) * (elite ? ELITE.damage : 1);
-    e.speed[i] = d.speed * this.rng.range(0.88, 1.12) * (elite ? ELITE.speed : 1);
+    e.damage[i] = d.damage * dir.damageMultiplier(t, c) * m.enemyDamage * (elite ? ELITE.damage : 1);
+    e.speed[i] = Math.min(BALANCE.spawn.maxEnemySpeed, speed * (elite ? ELITE.speed : 1));
     e.radius[i] = d.radius * scale;
     e.hover[i] = d.hover;
+    e.height[i] = d.height * scale;
     e.knockResist[i] = elite ? Math.min(0.9, d.knockbackResist + 0.5) : d.knockbackResist;
-    e.xp[i] = d.xp * (elite ? ELITE.xp : 1) * (1 + XB.xpPerMinute * (this.time / 60));
+    e.xp[i] = d.xp * (elite ? ELITE.xp : 1) * (1 + XB.xpPerMinute * (t / 60));
     e.scale[i] = scale;
     e.elite[i] = elite ? 1 : 0;
+    e.flags[i] = opts?.flags ?? 0;
     e.phase[i] = this.rng.range(0, Math.PI * 2);
-    e.timer[i] =
-      d.behavior === 'ranged' ? this.rng.range(1, ARCHER.cooldown) : d.behavior === 'exploder' ? -1 : 0;
+    e.timer[i] = d.ranged ? this.rng.range(1, d.ranged.cooldown) : d.behavior === 'exploder' ? -1 : 0;
     return i;
   }
 
@@ -698,9 +731,12 @@ export class World {
     const tmp = this.tmp2;
     const knockDecay = Math.exp(-7 * dt);
     const pr = PB.radius;
+    let maxRadius = 0;
 
     for (let i = 0; i < e.count; i++) {
       if (e.dead[i]) continue;
+      if (e.radius[i] > maxRadius) maxRadius = e.radius[i];
+      const def = ENEMIES[e.type[i]];
       e.contactCd[i] -= dt;
       if (e.flash[i] > 0) e.flash[i] -= dt;
       const frozen = e.frozen[i] > 0;
@@ -718,14 +754,15 @@ export class World {
       // Donmuş düşman yerinde durur, ateş etmez, fitili ilerlemez.
       if (frozen) sp = 0;
       else
-        switch (ENEMIES[e.type[i]].behavior) {
+        switch (def.behavior) {
           case 'ranged': {
+            const r = def.ranged as RangedParams;
             // Mesafe koru: uzaksa yaklaş, yakınsa geri çekil, aradaysa yana kay.
-            if (dist < ARCHER.minRange) {
+            if (dist < r.minRange) {
               ux = -ux;
               uz = -uz;
               sp *= 0.8;
-            } else if (dist <= ARCHER.maxRange) {
+            } else if (dist <= r.maxRange) {
               const side = e.uid[i] & 1 ? 1 : -1;
               const tx = uz * side;
               uz = -ux * side;
@@ -733,9 +770,9 @@ export class World {
               sp *= 0.35;
             }
             e.timer[i] -= dt;
-            if (e.timer[i] <= 0 && dist < ARCHER.fireRange) {
-              this.fireEnemyShot(i);
-              e.timer[i] = ARCHER.cooldown * this.rng.range(0.85, 1.15);
+            if (e.timer[i] <= 0 && dist < r.fireRange) {
+              this.fireEnemyShot(i, r);
+              e.timer[i] = r.cooldown * this.rng.range(0.85, 1.15);
             }
             break;
           }
@@ -752,7 +789,7 @@ export class World {
             }
             break;
           }
-          case 'chase':
+          default:
             break;
         }
       const vx = ux * sp;
@@ -806,22 +843,24 @@ export class World {
       e.z[i] = nz;
       e.y[i] = this.terrain.heightAt(nx, nz);
 
-      // Oyuncu ile temas: iç içe girmesinler, temas hasarı uygula.
+      // Oyuncu ile temas: gövdeler dikeyde örtüşüyorsa iç içe girmesinler, temas hasarı uygula
+      // (yarasa yerdeki oyuncuya vurur; zıplayan oyuncu alçak düşmanın üstünden geçer).
       const cx = p.x - nx;
       const cz = p.z - nz;
       const minD = e.radius[i] + pr;
       const c2 = cx * cx + cz * cz;
-      const ey = e.y[i] + e.hover[i];
-      if (c2 < minD * minD && Math.abs(ey - p.y) < 1.3) {
+      const bottom = e.y[i] + e.hover[i];
+      if (c2 < minD * minD && bottom < p.y + PB.height && bottom + e.height[i] > p.y) {
         const d = Math.sqrt(c2) || 1e-4;
         const overlap = minD - d;
         e.x[i] -= (cx / d) * overlap * 0.7;
         e.z[i] -= (cz / d) * overlap * 0.7;
         p.x += (cx / d) * overlap * 0.3;
         p.z += (cz / d) * overlap * 0.3;
-        if (e.contactCd[i] <= 0) this.contact(i, cx / d, cz / d, frozen);
+        if (e.contactCd[i] <= 0 && e.damage[i] > 0) this.contact(i, cx / d, cz / d, frozen);
       }
     }
+    this.hitPad = Math.max(0.8, maxRadius);
     p.x = this.terrain.clampToPlayable(p.x);
     p.z = this.terrain.clampToPlayable(p.z);
   }
@@ -910,29 +949,37 @@ export class World {
     if (d < EXPLODER.radius + PB.radius && Math.abs(p.y - e.y[i]) < 2.5) this.hurtPlayer(e.damage[i]);
   }
 
-  private fireEnemyShot(i: number): void {
+  private fireEnemyShot(i: number, r: RangedParams): void {
     const e = this.enemies;
     const p = this.player;
     const s = this.enemyShots;
     const j = s.add();
     if (j < 0) return;
+    const orb = r.shot === SHOT_ORB;
     const ox = e.x[i];
-    const oy = e.y[i] + e.hover[i] + 1.2 * e.scale[i];
     const oz = e.z[i];
+    // Ok göğüs hizasından oyuncuya nişan alır; küre yerin üstünde süzülür.
+    const oy = orb ? this.terrain.heightAt(ox, oz) + 1.1 : e.y[i] + e.hover[i] + 1.2 * e.scale[i];
     const dx = p.x - ox;
-    const dy = p.y + 1 - oy;
+    const dy = orb ? 0 : p.y + 1 - oy;
     const dz = p.z - oz;
     const len = Math.hypot(dx, dy, dz) || 1;
     s.x[j] = ox;
     s.y[j] = oy;
     s.z[j] = oz;
-    s.vx[j] = (dx / len) * ARCHER.shotSpeed;
-    s.vy[j] = (dy / len) * ARCHER.shotSpeed;
-    s.vz[j] = (dz / len) * ARCHER.shotSpeed;
-    s.life[j] = s.maxLife[j] = 2.5;
-    s.radius[j] = 0.3;
+    s.vx[j] = (dx / len) * r.shotSpeed;
+    s.vy[j] = (dy / len) * r.shotSpeed;
+    s.vz[j] = (dz / len) * r.shotSpeed;
+    s.life[j] = s.maxLife[j] = r.shotLife;
+    s.radius[j] = r.shotRadius;
+    s.homing[j] = r.homing;
+    s.kind[j] = r.shot;
+    if (orb) s.flags[j] = PF_GROUND_FOLLOW;
     s.damage[j] =
-      ARCHER.shotDamage * this.director.damageMultiplier(this.time) * (e.elite[i] ? ELITE.damage : 1);
+      r.shotDamage *
+      this.director.damageMultiplier(this.time, this.cycle) *
+      this.mods.enemyDamage *
+      (e.elite[i] ? ELITE.damage : 1);
   }
 
   private updateEnemyShots(dt: number): void {
@@ -941,10 +988,24 @@ export class World {
     for (let j = 0; j < s.count; j++) {
       if (s.dead[j]) continue;
       s.life[j] -= dt;
+      if (s.homing[j] > 0) {
+        // Yatay hızı oyuncuya doğru en fazla homing·dt kadar döndür.
+        const want = Math.atan2(p.x - s.x[j], p.z - s.z[j]);
+        const cur = Math.atan2(s.vx[j], s.vz[j]);
+        let da = want - cur;
+        da -= Math.round(da / (Math.PI * 2)) * Math.PI * 2;
+        const max = s.homing[j] * dt;
+        const a = cur + Math.max(-max, Math.min(max, da));
+        const sp = Math.hypot(s.vx[j], s.vz[j]);
+        s.vx[j] = Math.sin(a) * sp;
+        s.vz[j] = Math.cos(a) * sp;
+      }
       s.x[j] += s.vx[j] * dt;
-      s.y[j] += s.vy[j] * dt;
       s.z[j] += s.vz[j] * dt;
-      if (s.life[j] <= 0 || s.y[j] < this.terrain.heightAt(s.x[j], s.z[j]) - 0.2) {
+      const ground = this.terrain.heightAt(s.x[j], s.z[j]);
+      if (s.flags[j] & PF_GROUND_FOLLOW) s.y[j] += (ground + 1.1 - s.y[j]) * Math.min(1, 10 * dt);
+      else s.y[j] += s.vy[j] * dt;
+      if (s.life[j] <= 0 || s.y[j] < ground - 0.2) {
         s.dead[j] = 1;
         continue;
       }
@@ -960,11 +1021,18 @@ export class World {
     }
   }
 
+  /** `y` yüksekliği, düşmanın gövdesine (alt..üst) `pad` payıyla değiyor mu? */
+  private verticalHit(j: number, y: number, pad: number): boolean {
+    const e = this.enemies;
+    const bottom = e.y[j] + e.hover[j];
+    return y > bottom - pad && y < bottom + e.height[j] + pad;
+  }
+
   /** Bir küre içindeki tüm düşmanlara hasar (aura, patlama). */
   damageInRadius(x: number, y: number, z: number, r: number, base: number, knock: number): void {
     if (this.torches.count > 0) this.hitTorches(x, z, r);
     const e = this.enemies;
-    const n = this.enemyGrid.query(x, z, r + 1, this.buf);
+    const n = this.enemyGrid.query(x, z, r + Math.max(1, this.hitPad), this.buf);
     for (let k = 0; k < n; k++) {
       const j = this.buf[k];
       if (j >= e.count || e.dead[j]) continue;
@@ -972,7 +1040,7 @@ export class World {
       const dz = e.z[j] - z;
       const rr = r + e.radius[j];
       const d2 = dx * dx + dz * dz;
-      if (d2 > rr * rr || Math.abs(e.y[j] + e.hover[j] - y) > 2.5) continue;
+      if (d2 > rr * rr || !this.verticalHit(j, y, 2.5)) continue;
       const d = Math.sqrt(d2) || 1e-4;
       this.damageEnemy(j, base, (dx / d) * knock, (dz / d) * knock);
     }
@@ -1084,14 +1152,14 @@ export class World {
   ): void {
     if (this.torches.count > 0) this.hitTorchesInSector(x, z, dirX, dirZ, r, cosHalf);
     const e = this.enemies;
-    const n = this.enemyGrid.query(x, z, r + 1, this.buf);
+    const n = this.enemyGrid.query(x, z, r + Math.max(1, this.hitPad), this.buf);
     for (let k = 0; k < n; k++) {
       const j = this.buf[k];
       if (j >= e.count || e.dead[j]) continue;
       const dx = e.x[j] - x;
       const dz = e.z[j] - z;
       const d = Math.hypot(dx, dz) || 1e-4;
-      if (d > r + e.radius[j] || Math.abs(e.y[j] + e.hover[j] - y) > 2.5) continue;
+      if (d > r + e.radius[j] || !this.verticalHit(j, y, 2.5)) continue;
       if (d > 1.2 && (dx * dirX + dz * dirZ) / d < cosHalf) continue;
       this.damageEnemy(j, base, (dx / d) * knock, (dz / d) * knock);
     }
@@ -1194,7 +1262,7 @@ export class World {
       // Çarpışma: meşaleler (mermiyi tüketmez), sonra düşmanlar.
       const r = pr.radius[i];
       if (this.torches.count > 0) this.hitTorches(pr.x[i], pr.z[i], r);
-      const n = this.enemyGrid.query(pr.x[i], pr.z[i], r + 0.8, this.buf);
+      const n = this.enemyGrid.query(pr.x[i], pr.z[i], r + this.hitPad, this.buf);
       for (let k = 0; k < n; k++) {
         const j = this.buf[k];
         if (j >= e.count || e.dead[j]) continue;
@@ -1202,8 +1270,7 @@ export class World {
         const dz = e.z[j] - pr.z[i];
         const rr = r + e.radius[j];
         if (dx * dx + dz * dz > rr * rr) continue;
-        const ey = e.y[j] + e.hover[j] + 0.5;
-        if (Math.abs(ey - pr.y[i]) > 0.9 + r) continue;
+        if (!this.verticalHit(j, pr.y[i], 0.4 + r)) continue;
         if (pr.hasHit(i, e.uid[j])) continue;
         pr.rememberHit(i, e.uid[j]);
         const sp = Math.hypot(pr.vx[i], pr.vz[i]) || 1;
@@ -1344,7 +1411,7 @@ export class World {
     for (let k = 0; k < n && this.enemies.count < this.enemies.capacity; k++) {
       const a = this.rng.range(0, Math.PI * 2);
       const r = this.rng.range(minR, maxR);
-      const type = this.rng.int(0, ENEMIES.length - 1);
+      const type = REGULAR_TYPES[this.rng.int(0, REGULAR_TYPES.length - 1)];
       this.spawnEnemy(
         type,
         this.terrain.clampToPlayable(p.x + Math.sin(a) * r),

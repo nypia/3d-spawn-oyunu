@@ -83,3 +83,25 @@ describe('düşman davranışları', () => {
     expect(elites).toBe(1);
   });
 });
+
+describe('temas', () => {
+  it('yarasa yerdeki oyuncuya vurur', () => {
+    const w = arena();
+    const p = w.player;
+    w.spawnEnemy(ENEMY_INDEX.bat, p.x + 3, p.z);
+    run(w, 3);
+    expect(p.hp).toBeLessThan(p.maxHp);
+  });
+
+  it('zıplayan oyuncu balçığın üstünden geçer (dikey örtüşme yok)', () => {
+    const w = arena();
+    const p = w.player;
+    w.spawnEnemy(ENEMY_INDEX.slime, p.x + 0.3, p.z);
+    for (let t = 0; t < 1; t += DT) {
+      p.y = w.terrain.heightAt(p.x, p.z) + 2;
+      p.vy = 0;
+      w.step(NO_INPUT, DT);
+    }
+    expect(p.hp).toBe(p.maxHp);
+  });
+});

@@ -55,7 +55,8 @@ describe('headless run', () => {
     const { maxEnemies } = runBot(world, 600);
     assertFinite(world);
     expect(world.time).toBeGreaterThan(599);
-    expect(maxEnemies).toBeLessThanOrEqual(600);
+    // Temalı olaylar sınırı biraz aşabilir.
+    expect(maxEnemies).toBeLessThanOrEqual(Math.ceil(600 * BALANCE.spawn.eventOverflow));
     expect(world.kills).toBeGreaterThan(1000);
     expect(world.level).toBeGreaterThan(10);
   });

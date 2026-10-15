@@ -1,3 +1,15 @@
+/** flags: boss · çağrılmış (boss'un yardımcısı) · ganimet bırakmaz · özel (goblin; geri getirilmez). */
+export const EF_BOSS = 1;
+export const EF_SUMMON = 2;
+export const EF_NOLOOT = 4;
+export const EF_SPECIAL = 8;
+
+/** state: yürüyor · hazırlanıyor (atılma/büyü) · eylemde (atılıyor) · toparlanıyor. */
+export const ST_MOVE = 0;
+export const ST_WINDUP = 1;
+export const ST_ACT = 2;
+export const ST_RECOVER = 3;
+
 /**
  * Düşmanlar Struct-of-Arrays olarak tutulur: oyun sırasında bellek ayırma yok, cache dostu.
  * Silme "swap-remove" ile yapılır; bu yüzden indeksler kararsızdır, kalıcı kimlik için `uid` kullanın.
@@ -23,6 +35,8 @@ export class EnemyPool {
   readonly speed: Float32Array;
   readonly radius: Float32Array;
   readonly hover: Float32Array;
+  /** Gövde boyu (m, boy çarpanı dahil): temas ve isabet yüksekliği. */
+  readonly height: Float32Array;
   readonly knockResist: Float32Array;
   readonly contactCd: Float32Array;
   /** Vuruş flaşı kalan süresi. */
@@ -38,7 +52,14 @@ export class EnemyPool {
   readonly frozen: Float32Array;
   /** Kendi isteğiyle yürüdüğü toplam mesafe (m): render yürüme döngüsünü buna göre ilerletir. */
   readonly travel: Float32Array;
+  /** Davranışa özel yön/değer (atılma yönü, goblinin altın eşiği…). */
+  readonly ax: Float32Array;
+  readonly az: Float32Array;
   readonly type: Uint8Array;
+  /** ST_* durum makinesi (atılan, menzilli, boss). */
+  readonly state: Uint8Array;
+  /** EF_* bayrakları. */
+  readonly flags: Uint8Array;
   readonly elite: Uint8Array;
   readonly dead: Uint8Array;
   readonly uid: Int32Array;
@@ -59,6 +80,7 @@ export class EnemyPool {
     this.speed = f();
     this.radius = f();
     this.hover = f();
+    this.height = f();
     this.knockResist = f();
     this.contactCd = f();
     this.flash = f();
@@ -68,7 +90,11 @@ export class EnemyPool {
     this.timer = f();
     this.frozen = f();
     this.travel = f();
+    this.ax = f();
+    this.az = f();
     this.type = new Uint8Array(capacity);
+    this.state = new Uint8Array(capacity);
+    this.flags = new Uint8Array(capacity);
     this.elite = new Uint8Array(capacity);
     this.dead = new Uint8Array(capacity);
     this.uid = new Int32Array(capacity);
@@ -91,6 +117,10 @@ export class EnemyPool {
     this.timer[i] = 0;
     this.frozen[i] = 0;
     this.travel[i] = 0;
+    this.ax[i] = 0;
+    this.az[i] = 0;
+    this.state[i] = 0;
+    this.flags[i] = 0;
     this.elite[i] = 0;
     return i;
   }
@@ -117,6 +147,7 @@ export class EnemyPool {
     this.speed[i] = this.speed[last];
     this.radius[i] = this.radius[last];
     this.hover[i] = this.hover[last];
+    this.height[i] = this.height[last];
     this.knockResist[i] = this.knockResist[last];
     this.contactCd[i] = this.contactCd[last];
     this.flash[i] = this.flash[last];
@@ -126,7 +157,11 @@ export class EnemyPool {
     this.timer[i] = this.timer[last];
     this.frozen[i] = this.frozen[last];
     this.travel[i] = this.travel[last];
+    this.ax[i] = this.ax[last];
+    this.az[i] = this.az[last];
     this.type[i] = this.type[last];
+    this.state[i] = this.state[last];
+    this.flags[i] = this.flags[last];
     this.elite[i] = this.elite[last];
     this.dead[i] = this.dead[last];
     this.uid[i] = this.uid[last];

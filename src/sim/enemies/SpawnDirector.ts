@@ -1,76 +1,134 @@
 import type { Rng } from '../../core/Rng';
 import { BALANCE } from '../../data/balance';
 import { ELITE, ENEMIES, ENEMY_INDEX } from '../../data/enemies';
+import { CYCLE, WAVE_EVENTS, type WaveEvent, waveWeights } from '../../data/waves';
 import type { World } from '../world/World';
+import { EF_BOSS, EF_SPECIAL } from './EnemyPool';
 
 const S = BALANCE.spawn;
 
+/** announceFx türü: temalı dalga olayı (değer = WAVE_EVENTS indeksi). */
+export const ANN_EVENT = 0;
+
 /**
- * Kredi tabanlı spawn direktörü:
- *  - Her saniye zamana bağlı bir kredi birikir; kredi o an açık düşman türlerine harcanır.
- *  - Düşmanlar oyuncunun etrafındaki halkada, hareket yönüne ağırlıklı doğar.
- *  - Aktif düşman sınırına ulaşılınca yeni düşman doğmaz.
- *  - Çok uzakta kalan düşmanlar oyuncunun önüne taşınır (geri dönüşüm).
- *  - Belirli aralıklarla "kuşatma halkası" olayı.
+ * Zaman çizelgeli spawn direktörü:
+ *  - Çizelge (data/waves) hangi türün ne oranda doğacağını belirler; türler zamanla katılır ve
+ *    emekliye ayrılır.
+ *  - Kredi zamanla hızlanarak birikir. Önce tür seçilir, kredi o türün maliyetine yetene kadar
+ *    biriktirilir (pahalı türler de gerçekten gelsin).
+ *  - Temalı olaylar (çember, sürü, akın) belirli dakikalarda gelir ve sınırı biraz aşabilir.
+ *  - Elitler giderek sıklaşır. Uzakta kalan sıradan düşmanlar oyuncunun önüne taşınır.
  */
 export class SpawnDirector {
   credit = 0;
-  private nextRingEvent: number = S.ringEventInterval;
-  private nextElite: number = ELITE.interval;
+  /** Kredisi biriktirilen sıradaki tür (−1 = seçilmedi). */
+  pending = -1;
+  eventCursor = 0;
+  nextElite: number = ELITE.interval;
+  /** Bu zamana kadar normal spawn yok (Kan Ayı başlangıcı). */
+  calmUntil = 0;
+  /** Tür başına doğurulan düşman sayısı (tanı ve testler). */
+  readonly spawned = new Uint32Array(ENEMIES.length);
   private readonly weights: number[] = ENEMIES.map(() => 0);
 
   constructor(private readonly rng: Rng) {}
 
-  creditRate(time: number): number {
-    const m = time / 60;
+  /** Çizelge zamanı: 1. döngüde gerçek zaman, Kan Ayı'nda 8:00'dan hızlı tekrar (en fazla 20:00). */
+  timelineTime(world: World): number {
+    if (world.cycle <= 1) return Math.min(CYCLE.length, world.time);
+    return Math.min(CYCLE.length, CYCLE.timelineStart + (world.time - world.cycleStart) * CYCLE.pace);
+  }
+
+  creditRate(tl: number): number {
+    const m = tl / 60;
     return S.creditA + S.creditB * m + S.creditC * m * m;
   }
 
-  hpMultiplier(time: number): number {
-    return 1 + S.hpPerMinute * (time / 60);
+  /** Can çarpanı: mutlak zamanla (sonsuz modda da) büyür, Kan Ayı döngüsüyle katlanır. */
+  hpMultiplier(time: number, cycle = 1): number {
+    const m = time / 60;
+    return (1 + S.hpA * m + S.hpB * m * m) * CYCLE.hp ** (cycle - 1);
   }
 
-  damageMultiplier(time: number): number {
-    return 1 + S.damagePerMinute * (time / 60);
+  damageMultiplier(time: number, cycle = 1): number {
+    const m = time / 60;
+    return (1 + S.damageA * m + S.damageB * m * m) * CYCLE.damage ** (cycle - 1);
+  }
+
+  speedMultiplier(time: number, cycle = 1): number {
+    return Math.min(S.speedMax, 1 + S.speedPerMinute * (time / 60)) * CYCLE.speed ** (cycle - 1);
+  }
+
+  /** Olayların sınırı biraz aşabildiği tavan. */
+  eventCap(world: World): number {
+    return Math.min(world.enemies.capacity, Math.ceil(world.enemyCap * S.eventOverflow));
   }
 
   update(world: World, dt: number): void {
     const t = world.time;
+    const c = world.cycle;
+    const tl = this.timelineTime(world);
+    waveWeights(tl, this.weights);
+
     const curse = 1 + Math.max(0, world.stats.get('curse'));
-    this.credit = Math.min(S.maxStoredCredit, this.credit + this.creditRate(t) * curse * dt);
+    const calm = t < this.calmUntil ? 0 : 1;
+    const rate = this.creditRate(tl) * CYCLE.credit ** (c - 1) * curse * calm;
+    this.credit = Math.min(S.maxStoredCredit, this.credit + rate * dt);
 
-    // Krediyi harca
+    // Önce tür seç, sonra kredisini biriktir.
+    if (this.pending < 0 || this.weights[this.pending] <= 0)
+      this.pending = this.rng.weightedIndex(this.weights);
     let guard = 64;
-    while (guard-- > 0 && world.enemies.count < world.enemyCap) {
-      for (let k = 0; k < ENEMIES.length; k++) {
-        const d = ENEMIES[k];
-        this.weights[k] = t >= d.unlockTime && d.cost <= this.credit ? d.weight : 0;
-      }
-      const type = this.rng.weightedIndex(this.weights);
-      if (type < 0) break;
-      if (!this.spawnAroundPlayer(world, type)) break;
-      this.credit -= ENEMIES[type].cost;
+    while (guard-- > 0 && this.pending >= 0 && world.enemies.count < world.enemyCap) {
+      const cost = ENEMIES[this.pending].cost;
+      if (this.credit < cost) break;
+      if (!this.spawnAroundPlayer(world, this.pending)) break;
+      this.credit -= cost;
+      this.spawned[this.pending]++;
+      this.pending = this.rng.weightedIndex(this.weights);
     }
 
-    // Kuşatma halkası
-    if (t >= this.nextRingEvent) {
-      this.nextRingEvent += S.ringEventInterval;
-      const n = Math.round(S.ringBase + S.ringPerMinute * (t / 60));
-      this.spawnRing(world, ENEMY_INDEX.slime, n, S.ringRadius);
+    // Temalı olaylar.
+    while (this.eventCursor < WAVE_EVENTS.length && WAVE_EVENTS[this.eventCursor].at <= tl) {
+      const index = this.eventCursor++;
+      const ev = WAVE_EVENTS[index];
+      if (tl - ev.at > S.staleEvent) continue;
+      this.fireEvent(world, ev, index);
     }
 
-    // Elit: açık türlerden biri (patlayan hariç), büyük ve güçlü; ölünce sandık düşürür.
+    // Elitler: çizelgedeki türlerden (patlayan hariç), zamanla sıklaşır.
     if (t >= this.nextElite) {
-      this.nextElite += ELITE.interval;
-      for (let k = 0; k < ENEMIES.length; k++) {
-        const d = ENEMIES[k];
-        this.weights[k] = t >= d.unlockTime && d.behavior !== 'exploder' ? d.weight : 0;
+      const m = t / 60;
+      this.nextElite = t + Math.max(ELITE.minInterval, ELITE.interval - 2 * m);
+      const exploder = ENEMY_INDEX.exploder;
+      const saved = this.weights[exploder];
+      this.weights[exploder] = 0;
+      for (let k = 0; k < Math.min(ELITE.maxPerWave, c); k++) {
+        const type = this.rng.weightedIndex(this.weights);
+        if (type >= 0) this.spawnAroundPlayer(world, type, true);
       }
-      const type = this.rng.weightedIndex(this.weights);
-      if (type >= 0) this.spawnAroundPlayer(world, type, true);
+      this.weights[exploder] = saved;
     }
 
     this.recycleFarEnemies(world);
+  }
+
+  /** Olay sayısı Kan Ayı'nda ve lanetle büyür. */
+  eventCount(world: World, ev: WaveEvent): number {
+    const curse = Math.max(0, world.stats.get('curse'));
+    return Math.round(ev.count * CYCLE.eventCount ** (world.cycle - 1) * (1 + 0.5 * curse));
+  }
+
+  fireEvent(world: World, ev: WaveEvent, index: number): void {
+    const type = ENEMY_INDEX[ev.enemy];
+    if (type === undefined) return;
+    const n = this.eventCount(world, ev);
+    const cap = this.eventCap(world);
+    if (cap <= 0) return;
+    if (ev.kind === 'ring') this.spawnRing(world, type, n, ev.radius ?? S.ringRadius, cap);
+    else if (ev.kind === 'swarm') this.spawnSwarm(world, type, n, cap);
+    else this.spawnHorde(world, type, n, cap);
+    world.announceFx.push(ANN_EVENT, index, 0);
   }
 
   spawnAroundPlayer(world: World, type: number, elite = false): boolean {
@@ -89,13 +147,45 @@ export class SpawnDirector {
     return false;
   }
 
-  spawnRing(world: World, type: number, n: number, radius: number): void {
+  /** Oyuncuyu çevreleyen çember. */
+  spawnRing(world: World, type: number, n: number, radius: number, cap = world.enemyCap): void {
     const p = world.player;
-    for (let k = 0; k < n && world.enemies.count < world.enemyCap; k++) {
+    for (let k = 0; k < n && world.enemies.count < cap; k++) {
       const a = (k / n) * Math.PI * 2;
       const x = world.terrain.clampToPlayable(p.x + Math.sin(a) * radius);
       const z = world.terrain.clampToPlayable(p.z + Math.cos(a) * radius);
-      world.spawnEnemy(type, x, z);
+      if (world.spawnEnemy(type, x, z) >= 0) this.spawned[type]++;
+    }
+  }
+
+  /** Hareket yönünde 30 m ötede tek bir küme. */
+  private spawnSwarm(world: World, type: number, n: number, cap: number): void {
+    const p = world.player;
+    const a =
+      (p.speed > 1 ? Math.atan2(p.vx, p.vz) : this.rng.range(0, Math.PI * 2)) + this.rng.gaussian() * 0.5;
+    const cx = p.x + Math.sin(a) * 30;
+    const cz = p.z + Math.cos(a) * 30;
+    for (let k = 0; k < n && world.enemies.count < cap; k++) {
+      const x = world.terrain.clampToPlayable(cx + this.rng.gaussian() * 3.5);
+      const z = world.terrain.clampToPlayable(cz + this.rng.gaussian() * 3.5);
+      if (world.spawnEnemy(type, x, z) >= 0) this.spawned[type]++;
+    }
+  }
+
+  /** Bir yönden iki sıra halinde 100°'lik yay: duvar gibi gelen akın. */
+  private spawnHorde(world: World, type: number, n: number, cap: number): void {
+    const p = world.player;
+    const base = p.speed > 1 ? Math.atan2(p.vx, p.vz) : this.rng.range(0, Math.PI * 2);
+    const arc = (100 * Math.PI) / 180;
+    const perRow = Math.ceil(n / 2);
+    for (let k = 0; k < n && world.enemies.count < cap; k++) {
+      const row = k < perRow ? 0 : 1;
+      const j = row === 0 ? k : k - perRow;
+      const a = base - arc / 2 + (arc * (j + 0.5 * row)) / perRow;
+      const r = 32 + row * 2.2;
+      const x = world.terrain.clampToPlayable(p.x + Math.sin(a) * r);
+      const z = world.terrain.clampToPlayable(p.z + Math.cos(a) * r);
+      if (world.spawnEnemy(type, x, z) >= 0) this.spawned[type]++;
     }
   }
 
@@ -106,7 +196,7 @@ export class SpawnDirector {
     const moving = p.speed > 1;
     const base = moving ? Math.atan2(p.vx, p.vz) : 0;
     for (let i = 0; i < e.count; i++) {
-      if (e.dead[i]) continue;
+      if (e.dead[i] || e.flags[i] & (EF_BOSS | EF_SPECIAL)) continue;
       const dx = e.x[i] - p.x;
       const dz = e.z[i] - p.z;
       if (dx * dx + dz * dz <= d2max) continue;
