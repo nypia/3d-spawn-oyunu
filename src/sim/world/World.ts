@@ -1048,7 +1048,7 @@ export class World {
       return;
     }
     if (frozen) return;
-    e.contactCd[i] = PB.contactCooldown;
+    e.contactCd[i] = PB.contactCooldown * (e.flags[i] & EF_BOSS ? BOSS.contactCooldownMul : 1);
     const dash = ENEMIES[e.type[i]].dash;
     const charging = e.state[i] === ST_ACT;
     const mul = !charging ? 1 : dash ? dash.damageMul : e.flags[i] & EF_BOSS ? BOSS.dashDamageMul : 1;

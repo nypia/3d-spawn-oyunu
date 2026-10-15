@@ -21,7 +21,7 @@ export const BALANCE = {
     height: 1.8,
     baseHp: 100,
     /** Taban can yenilenmesi (can/sn). */
-    baseRegen: 0.25,
+    baseRegen: 0.5,
     baseMoveSpeed: 7,
     groundAccel: 70,
     airAccel: 22,
@@ -45,7 +45,7 @@ export const BALANCE = {
 
   xp: {
     /** xpToNext(n) = round(base * n^exp) */
-    base: 6,
+    base: 5,
     exp: 1.42,
     /** Yerde en fazla bu kadar XP taşı; fazlası en uzak taşı yeni taşa katar (XP kaybolmaz). */
     gemCapacity: 800,
@@ -64,14 +64,14 @@ export const BALANCE = {
     despawnDistance: 58,
     /** Saniye başına kredi: a + b·dk + c·dk² (dk = çizelge dakikası). */
     creditA: 1,
-    creditB: 1.2,
+    creditB: 1,
     creditC: 0.08,
     maxStoredCredit: 40,
-    /** Düşman canı: 1 + a·dk + b·dk² (20. dakikada ×15). */
-    hpA: 0.1,
-    hpB: 0.03,
+    /** Düşman canı: 1 + a·dk + b·dk² (20. dakikada ×12,6). */
+    hpA: 0.08,
+    hpB: 0.025,
     /** Düşman hasarı: 1 + a·dk + b·dk². */
-    damageA: 0.06,
+    damageA: 0.04,
     damageB: 0.004,
     /** Düşman hızı: dakikada +%1, en fazla ×1.2; atılmalar hariç mutlak üst sınır (m/s). */
     speedPerMinute: 0.01,

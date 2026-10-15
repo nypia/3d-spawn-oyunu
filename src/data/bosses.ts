@@ -52,7 +52,7 @@ export const BOSS = {
   warn: 10,
   spawnDist: 24,
   /** Can: zaman çarpanı × (1 + hpPerLevel·oyuncu seviyesi) × cycleHp^(döngü−1). */
-  hpPerLevel: 0.03,
+  hpPerLevel: 0.02,
   cycleHp: 1.25,
   /** Kan Ayı'nda saldırı beklemeleri: cycleCooldown^(döngü−1), en az minCooldownMul. */
   cycleCooldown: 0.85,
@@ -64,6 +64,8 @@ export const BOSS = {
   catchUpMul: 2,
   /** Atılırken/hücumda temas hasarı çarpanı. */
   dashDamageMul: 1.5,
+  /** Boss teması daha seyrek vurur (oyuncu kaçabilsin). */
+  contactCooldownMul: 2,
   /** Boss sandığı: final boss en az epik verir. */
   finalChestMinRarity: 2,
   /** Tespih boss'tan canının bu kadarını alır. */

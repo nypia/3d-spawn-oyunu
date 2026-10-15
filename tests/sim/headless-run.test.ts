@@ -59,6 +59,8 @@ describe('headless run', () => {
     expect(maxEnemies).toBeLessThanOrEqual(Math.ceil(600 * BALANCE.spawn.eventOverflow));
     expect(world.kills).toBeGreaterThan(1000);
     expect(world.level).toBeGreaterThan(10);
+    // 5:00'te Balçık Kral doğmuş olmalı.
+    expect(world.bosses.killed + world.bosses.active.length).toBeGreaterThanOrEqual(1);
   });
 
   it('normal bot zamanla ölür ve oyun durur', () => {

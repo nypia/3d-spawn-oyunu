@@ -5,7 +5,18 @@ Three.js + TypeScript ile yazıldı; PC (klavye + fare) ve telefonda (dokunmatik
 
 Oyun tasarımı, mimari ve yol haritası: **[docs/GDD.md](docs/GDD.md)**
 
-## Şu an oyunda neler var (v0.4)
+## Şu an oyunda neler var (v0.5)
+
+- **20 dakikalık koşu + Kan Ayı (v0.5):** düşmanlar dakika dakika güçlenir, yaklaşık her 1,5 dakikada
+  yeni bir yaratık katılır, belirli dakikalarda temalı dalgalar gelir ("Ölü yürüyüşü", "Yarasa
+  fırtınası"…). 5., 10. ve 15. dakikada boss (Balçık Kral, Vampir Lordu, Taş Dev), 20. dakikada final
+  boss **Kemik Kral**. Boss saldırıları yerde kırmızı uyarıyla gelir; doğru anda zıplarsan kurtulursun.
+  Final boss ölünce oyun bitmez: dünya **Kan Ayı** gecesine döner, daha zor bir döngü başlar ve
+  boss'lar "Kanlı" hâlleriyle geri gelir. Ölene kadar sürer; en iyi rekor saklanır.
+- **Sandık çarkı (v0.5):** sandık sarsılır, kapağı açılır, eşyalar şerit hâlinde dönüp yavaşlar.
+  Nadirliğe göre açılış efekti; efsanevide dönen altın ışınlar, konfeti ve "EFSANEVİ!" damgası.
+- **Ses (v0.5):** vuruş, ölüm, patlama, toplama, sandık, boss ve Kan Ayı sesleri, menü / gündüz /
+  boss / Kan Ayı müzikleri. Duraklatma ekranında ses ayarları, HUD'da 🔊, M tuşu.
 
 - **Görsel cila (v0.4):** animasyonlu Kenney maceracısı (4 karakter arasından seçilir), iskelet ve ork
   okçu gibi gerçek modeller, koddan çizilip canlandırılmış Balçık, Yarasa, Patlayan ve Golem.
@@ -19,7 +30,9 @@ Oyun tasarımı, mimari ve yol haritası: **[docs/GDD.md](docs/GDD.md)**
 - **8 kitap** (pasif stat) ve **nadirlik** (Sıradan / Nadir / Epik / Efsanevi). En fazla
   **4 silah + 4 kitap**; yuvalar dolunca sahip olduklarının seviyeleri çıkar. Seviye atlamada
   Yenile, Yasakla ve Atla hakları var.
-- **6 düşman** (Balçık, İskelet, Yarasa, Patlayan, Okçu, Golem) ve 75 saniyede bir **elit**.
+- **10 düşman** (Balçık, İskelet, Yarasa, Zombi, Patlayan, Okçu, Hayalet, Vampir, Golem, Mezar
+  Bekçisi), giderek sıklaşan **elitler**. Hayalet engellerden geçer, Vampir hazırlanıp atılır,
+  Bekçi peşinden gelen mor küreler atar.
   Güçlü düşmanlar daha değerli, farklı renkte XP taşı düşürür (mavi → yeşil → kırmızı → mor).
 - **Altın, vazolar ve sandıklar.** Sandıktan nadirliğe göre **14 benzersiz eşya** çıkar
   (Anka Tüyü, Yankı Yüzüğü, Buz Kristali, Roket Çizme…). Elitler ücretsiz sandık düşürür.
@@ -53,6 +66,7 @@ npm run dev        # http://localhost:5173
 | R | Kartları yenile |
 | E / Enter | Sandık çarkını atlat, eşyayı al |
 | Esc | Duraklat · paktı reddet |
+| M | Sesi kapat / aç |
 
 **Dokunmatik:** ekranın sol yarısında sürükle → koş, sağ yarısında sürükle → kamera.
 ZIPLA ve KAY (basılı tut) butonları sağ altta, duraklat sağ üstte.
@@ -78,7 +92,8 @@ Yerelde query string, Artifact linkinde hash kullanılır (ikisi birleştirilebi
 | `npm run typecheck` | TypeScript kontrolü |
 | `npm run lint` / `npm run format` | Biome ile lint ve format |
 | `npm test` | Birim testleri + tarayıcısız 10 dakikalık simülasyon + performans testi |
-| `npm run diag` | Denge raporu: bot dakika dakika seviye, düşman, taş ve altını yazar; 6 seed'de ölüm süreleri |
+| `npm run diag` | Denge raporu: bot dakika dakika seviye, doğan türler, boss'lar; 8 seed'de ölüm süreleri |
+| `npm run fetch-assets` / `npm run fetch-audio` | Kenney modellerini / sesleri ve müzikleri indirip küçültür (ffmpeg gerekir) |
 | `npm run test:e2e` | Playwright ile masaüstü ve telefon (dokunmatik) testleri (önce `npm run build`) |
 | `npm run build:artifact` | claude.ai Artifact için tek dosyalık sayfa (`dist-artifact/spawn.html`) |
 
@@ -92,9 +107,12 @@ Yerelde query string, Artifact linkinde hash kullanılır (ikisi birleştirilebi
   çizilir: animasyonlar kemik matrisi dokusuna önceden pişirilir, her düşman türü tek draw call ile
   kendi animasyon karesini oynar. Efektler `fx/` altında havuzlu parçacıklardır. Yüksek kalitede
   bloom art işlemi açıktır; yavaş cihazda bloom ve çözünürlük kendiliğinden düşer.
-- `src/ui/`: DOM tabanlı HUD ve menüler.
+- `src/ui/`: DOM tabanlı HUD ve menüler (sandık çarkı `ChestReel`, açılış efektleri `rewardFx`).
+- `src/audio/`: Web Audio. `AudioManager` (kanallar, ses sınırlayıcı, konumlu ses, müzik geçişi) ve
+  `SoundEvents` (sim olaylarını kendi imleciyle okuyup sese çevirir).
 
 ## Lisans / asset'ler
 
-3D modeller [Kenney](https://kenney.nl) (CC0), yazı tipleri Baloo 2 ve Nunito (SIL OFL 1.1).
-Ayrıntılar `CREDITS.md` dosyasında. Modelleri yeniden indirmek için: `npm run fetch-assets`.
+3D modeller ve ses efektleri [Kenney](https://kenney.nl) (CC0), müzikler Juhani Junkala
+"Chiptune Adventures" (CC0, OpenGameArt), yazı tipleri Baloo 2 ve Nunito (SIL OFL 1.1).
+Ayrıntılar `CREDITS.md` dosyasında. Yeniden indirmek için: `npm run fetch-assets`, `npm run fetch-audio`.

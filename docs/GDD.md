@@ -13,8 +13,9 @@
 | M5 (kısmen) — Dokunmatik kontroller | ✅ Öne alındı: joystick, kamera sürükleme, ZIPLA/KAY, otomatik kamera, kısa ekran düzeni |
 | v0.3 — Geri bildirim turu + VS ilhamı | ✅ Tamam: XP taşı hatası, taş kademeleri, 4+4 yuva görünür, mıknatıs altın çeker, 14 benzersiz eşya, meşaleler + Saat/Tespih, silah evrimi, rehber |
 | M3 — Görsel (v0.4) | ✅ Tamam: Kenney modelleri, animasyonlu kalabalık (CrowdMesh), el yapımı rig'ler, kahraman seçimi, dünya (ağaç, çimen, gök), bloom, parçacıklar, arayüz cilası |
-| M3 — Ses | ⏳ Sırada |
-| M4, M5'in kalanı, M6, M7 | Planlandı |
+| v0.5 — Zorluk, boss'lar, Kan Ayı, ses | ✅ Tamam: zaman çizelgeli spawn ve doğrusal olmayan ölçekleme, 4 yeni yaratık, 4 boss + tehlike alanları, Kan Ayı döngüleri, Ruh Kazanı / Lanet Sunağı / Hazine Goblini (tapınak kalktı), sandık çarkı ve nadirlik efektleri, ses ve müzik |
+| M3 — Ses | ✅ Tamam (v0.5) |
+| M4 (bölüm yapısı: 20 dk + Kan Ayı), M5'in kalanı, M6, M7 | Kısmen / planlandı |
 
 **Oynanabilir sürüm:** claude.ai Artifact olarak yayınlanıyor (`npm run build:artifact`). three.js
 jsDelivr CDN'den yüklenir, geri kalan her şey tek HTML dosyasına gömülür. Artifact'a query string
@@ -34,6 +35,22 @@ ulaşmadığı için hata ayıklama bayrakları hash ile verilir (`#debug`, `#lo
 - Mıknatıs: vazodan %8, elitten %50, meşaleden (sv5+) düşer.
 - `npm run diag` botuyla: 9. dakikada ~25. seviye, yerde ≤800 taş. Normal bot 6 seed'in 5'inde
   15 dakikayı tamamladı. Eski sürümde bu oran 3/6 idi; v0.3 daha kolay. M3'ten sonra yeniden ayarlanacak.
+
+### v0.5'te değişenler
+- **Kök neden:** spawn direktörü krediyi 1'e ulaşır ulaşmaz harcıyordu; pahalı türler (iskelet, okçu,
+  golem) neredeyse hiç doğmuyordu. Artık önce tür seçilip kredisi biriktiriliyor.
+- **Zaman çizelgesi** (`data/waves.ts`): 0–20 dk'da yaklaşık 1,5 dk'da bir yeni tür (Zombi 4:00,
+  Patlayan 5:30, Okçu 7:00, Hayalet 8:30, Vampir 11:00, Golem 12:30, Mezar Bekçisi 14:00); Balçık ve
+  İskelet emekliye ayrılır. 23 temalı olay (çember, sürü, akın).
+- **Ölçekleme** (m = dakika, c = döngü): can `(1 + 0.08m + 0.025m²)·1.5^(c−1)`, hasar
+  `(1 + 0.04m + 0.004m²)·1.3^(c−1)`, hız `min(1.2, 1 + 0.01m)·1.06^(c−1)`, kredi `1 + m + 0.08m²`.
+  XP eğrisi `5 · n^1.42`, taban can yenilenmesi 0.5/sn.
+- **Boss'lar:** 5:00 Balçık Kral, 10:00 Vampir Lordu, 15:00 Taş Dev, 20:00 Kemik Kral (final).
+  Saldırılar kırmızı uyarı alanlarıyla gösterilir; iyi zamanlanmış zıplama kurtarır.
+- **Kan Ayı:** final boss ölünce dünya kızıl geceye döner, daha zor bir döngü başlar (çizelge 8:00'dan
+  1,5 kat hızla), boss'lar "Kanlı" döner, sonraki final 40:00'ta. Oyun ölene kadar sürer; rekor saklanır.
+- `npm run diag` botu (dengeli yapı kurar, uyarı alanlarından kaçar, sandık açmaz): normal botlar
+  5–21. dakikada (medyan ~12) ölüyor, ölümsüz bot 20. dakikada ~86. seviyede.
 
 ## Bağlam
 
@@ -55,15 +72,16 @@ kopyalanmayacak. Silah, karakter ve düşman isimleri bize özgü olacak.
 ```
 Koş → silahlar otomatik saldırır → düşmanlar ölür → XP taşı düşer → topla → seviye atla
 → 3 kart arasından seç (silah / kitap / güç) → daha güçlü ol → daha kalabalık sürüyle başa çık
-→ altınla sandık aç (eşya ya da evrim), tapınak doldur, meşale kır → bölüm sonu (ileride)
+→ altınla sandık aç (eşya ya da evrim), Ruh Kazanı doldur, pakt yap, goblin kovala, meşale kır
+→ 5/10/15. dk'da boss, 20. dk'da final → Kan Ayı döngüsü (ölene kadar)
 Run bitince: gümüş kazan → kalıcı açılımlar (meta) → yeni run
 ```
 
 ### 1.2 Run yapısı (bir bölüm)
 - **Bölüm süresi 10:00.** Ekranın üstünde geri sayım var.
 - 0–8 dk: dalgalar giderek yoğunlaşır, her 60–90 sn'de bir **elit** düşman çıkar (sandık düşürür).
-- **Bölüm sonu mekaniği: henüz karar verilmedi.** Megabonk'taki boss portalı ve "Son Dalga"
-  **olmayacak** (kullanıcı kararı). Yerine ileride birlikte başka bir mekanik seçilecek.
+- **Bölüm sonu (v0.5): Kan Ayı.** Megabonk'taki boss portalı **yok** (kullanıcı kararı). 20. dakikadaki
+  final boss ölünce oyun bitmez: dünya olduğu yerde kızıl geceye döner ve daha zor bir döngü başlar.
 - MVP: 2 bölüm (biyom). Sonra 3. bölüm ve zorluk kademeleri gelir.
 
 ### 1.3 Kontroller
@@ -73,7 +91,7 @@ Run bitince: gümüş kazan → kalıcı açılımlar (meta) → yeni run
 | Kamera | Mouse (pointer lock) | Sağ yarıda sürükle + hareket yönüne otomatik dönüş |
 | Zıplama | Space | Sağ altta buton |
 | Kayma | Shift / Ctrl | Sağ altta buton |
-| Etkileşim (sandık/tapınak) | E (veya üzerine yürü) | Üzerine yürüyünce otomatik |
+| Etkileşim (sandık/sunak) | Üzerine yürü | Üzerine yürüyünce otomatik |
 | Duraklat | Esc | Sol üst buton + uygulama arka plana gidince otomatik |
 
 Silahlar **otomatik nişan alır**. Bu yüzden mobilde kamerayı kontrol etmek zorunlu değil.
@@ -101,8 +119,12 @@ Silahlar **otomatik nişan alır**. Bu yüzden mobilde kamerayı kontrol etmek z
 - **Altın:** düşmanlardan, vazolardan ve meşalelerden düşer. **Sandık** açmak altın ister ve her
   açılışta fiyatı artar. Sandıktan nadirlik zarı atılmış bir **eşya** ya da **evrim** çıkar.
 - **Silah evrimi:** silah maks seviyede (8) ve eşleşen kitap en az Sv.1 iken açılan sandık evrim verir.
-- **Tapınak (Shrine):** haritaya dağılmış halkalar. İçinde 4 sn durunca 3 stat bonusundan biri seçilir.
-  Her tapınak bir kez kullanılır.
+- **Ruh Kazanı (v0.5, tapınağın yerine):** 9 m içinde ölen düşmanların ruhları kazana akar; dolunca
+  patlar, şanslı bir kazan sandığı bırakır, 60 sn soğur ve her seferinde daha çok ruh ister.
+- **Lanet Sunağı:** iki pakt sunar (güç + kalıcı lanet, ör. +%25 hasar / −%20 maks can); reddedilebilir.
+- **Hazine Goblini:** ara sıra çıkar ve kaçar; vurdukça altın saçar, yakalanınca altın yağmuru.
+- **Sandık çarkı:** açılan sandıkta eşyalar şerit halinde döner; nadirliğe göre açılış efekti
+  (efsanevide ışınlar, konfeti, "EFSANEVİ!" damgası). Boss sandığı 3 eşya verir.
 
 ### 1.6 MVP içerik listesi
 
@@ -182,7 +204,7 @@ Sandık önce nadirlik zarı atar (Şans etkiler), sonra o kademeden bir eşya s
 - **Prosedürel yükseklik haritası (heightmap):** simplex noise + seed. Boyut 320×320 m ve sınırları
   sarp kayalık/çit. Tepe, çukur ve rampalar sayesinde kayma ve zıplama anlamlı olur.
 - Dekor (ağaç, kaya, mezar taşı) instanced olarak çizilir. Engeller fizikte basit daire çarpıştırıcıdır.
-- Tapınak, sandık ve vazo seed'li olarak, birbirinden minimum mesafeyle yerleşir. Meşaleler ise
+- Kazan, sunak, sandık ve vazo seed'li olarak, birbirinden minimum mesafeyle yerleşir. Meşaleler ise
   oyuncunun çevresinde oyun sırasında belirir.
 - Biyom 1: Çayır/Orman. Biyom 2: Mezarlık/Çöl (farklı renk paleti, sis rengi ve düşman havuzu).
 
@@ -384,7 +406,8 @@ hasar sayıları, mıknatıs, XP taşı birleştirme, headless sim testi.
 Kenney/Quaternius asset'leri, oyuncu animasyonları, instanced düşmanlar + shader animasyonu + vuruş
 flaşı, VFX, telegraph halkaları, ışık/sis/biyom paleti, SFX + müzik, yükleme ekranı, `CREDITS.md`.
 ✔ Kabul: Masaüstünde 600 düşmanda 60 FPS, oyun "gerçek oyun" gibi görünüyor.
-Görsel kısım v0.4'te tamamlandı (yukarıdaki 2.4). Ses (SFX + müzik) sırada.
+Görsel kısım v0.4'te, ses (Kenney CC0 efektler + Juhani Junkala müzikleri, `AudioManager` +
+`SoundEvents`) v0.5'te tamamlandı.
 
 **v0.3 — Geri bildirim turu (tamamlandı)**
 XP taşı hatası, güçlü düşman XP'si ve taş kademeleri, 4+4 yuva görünür, mıknatıs altını da çeker,
