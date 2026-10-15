@@ -28,11 +28,11 @@ export interface HeroPicker {
   onSelect: (id: string) => void;
 }
 
-export interface ShrineView {
+export interface PactView {
   icon: string;
-  title: string;
-  rarity: number;
-  rarityName: string;
+  name: string;
+  boon: string;
+  bane: string;
 }
 
 export interface LevelUpActions {
@@ -223,27 +223,41 @@ export class Screens {
     revealBurst(host, this.el, 3, 'EVRİM!');
   }
 
-  /** Tapınak doldu: üç bonustan birini seç. */
-  showShrine(options: ShrineView[], onPick: (i: number) => void): void {
+  /** Lanet Sunağı: iki paktdan birini seç ya da reddet (uzaklaşıp dönünce aynı seçenekler gelir). */
+  showPact(options: PactView[], onPick: (i: number) => void, onDecline: () => void): void {
     const cards = options.map((o, i) => {
       const card = h(
-        'button.card',
-        { 'data-testid': `shrine-${i}`, 'data-rarity': String(o.rarity) },
+        'button.card.pact-card',
+        { 'data-testid': `pact-${i}` },
         h('span.card-key', {}, String(i + 1)),
         h('span.card-icon', {}, o.icon),
-        h('span.card-title', {}, o.title),
-        h('span.card-rarity', {}, o.rarityName),
+        h('span.card-title', {}, o.name),
+        h('span.pact-boon', {}, `▲ ${o.boon}`),
+        h('span.pact-bane', {}, `▼ ${o.bane}`),
       );
       card.addEventListener('click', () => onPick(i));
       return card;
     });
+    const decline = h(
+      'button.btn.btn-small',
+      { 'data-testid': 'decline' },
+      'Reddet',
+      h('span.keys-only', {}, ' (Esc)'),
+    );
+    decline.addEventListener('click', onDecline);
     this.show(
       h(
-        'div.panel.levelup',
+        'div.panel.levelup.pact',
         {},
-        h('h2', {}, 'Tapınak kutsaması'),
-        h('p.subtitle', {}, 'Kalıcı bir bonus seç', h('span.keys-only', {}, ` (1–${options.length})`)),
+        h('h2', {}, 'Lanet Sunağı'),
+        h(
+          'p.subtitle',
+          {},
+          'Güç kazan, bedelini kalıcı öde',
+          h('span.keys-only', {}, ` (1–${options.length})`),
+        ),
         h('div.cards', {}, ...cards),
+        h('div.buttons', {}, decline),
       ),
     );
   }

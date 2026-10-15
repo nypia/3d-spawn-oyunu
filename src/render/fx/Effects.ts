@@ -10,7 +10,8 @@ import {
   PICKUP_MAGNET,
   PICKUP_ROSARY,
 } from '../../sim/pickups/PickupPool';
-import { CHEST, SHRINE, VASE } from '../../sim/world/Interactables';
+import { ALTAR, CAULDRON, CHEST, VASE } from '../../sim/world/Interactables';
+import { GOBLIN_DEATH, GOBLIN_DROP } from '../../sim/world/Landmarks';
 import { TORCH_FX } from '../../sim/world/Torches';
 import { COLLECT_GEM, type World } from '../../sim/world/World';
 import type { GameAssets } from '../assets/loadAssets';
@@ -34,6 +35,7 @@ const DEATH: Record<string, { colors: [number, number]; n: number; size: number;
   ghost: { colors: [0xe8e6ff, 0xb9b4ff], n: 6, size: 0.2, spark: 0xc8c0ff },
   vampire: { colors: [0x2a2030, 0xb3243a], n: 7, size: 0.2, spark: 0xff3a5a },
   keeper: { colors: [0x9a5b2e, 0x3f8f5a], n: 7, size: 0.22, spark: 0xc06bff },
+  goblin: { colors: [0x5f9a3a, 0xffcf33], n: 8, size: 0.2, spark: 0xffd34a },
 };
 
 /** Sandık patlaması: Sıradan, Nadir, Epik, Efsanevi. */
@@ -56,6 +58,19 @@ const MAX_COLLECTS = 30;
 const MAX_TRAILS = 140;
 
 const rnd = (a: number, b: number) => a + Math.random() * (b - a);
+
+/** Kazana uçan ruh: başlangıç, hedef, geçen süre. */
+interface Soul {
+  sx: number;
+  sy: number;
+  sz: number;
+  tx: number;
+  ty: number;
+  tz: number;
+  t: number;
+  dur: number;
+}
+const MAX_SOULS = 80;
 
 /**
  * Oyunun parçacık efektleri. Sim'in olay akışlarını (vuruş, ölüm, patlama, kırılma, toplama) ve
@@ -80,6 +95,9 @@ export class Effects {
   private blastCursor = 0;
   private breakCursor = 0;
   private collectCursor = 0;
+  private soulCursor = 0;
+  private goblinCursor = 0;
+  private readonly souls: Soul[] = [];
   private lastLevel = 1;
   private wasGrounded = true;
   private airborne = 0;
@@ -119,6 +137,9 @@ export class Effects {
     this.blastCursor = world.blastFx.written;
     this.breakCursor = world.breakFx.written;
     this.collectCursor = world.collectFx.written;
+    this.soulCursor = world.soulFx.written;
+    this.goblinCursor = world.goblinFx.written;
+    this.souls.length = 0;
     this.lastLevel = world.level;
     this.wasGrounded = true;
     this.airborne = 0;
@@ -142,6 +163,8 @@ export class Effects {
     this.torches(world, dt, time);
     this.projectiles(world);
     this.pickupHalos(world, time);
+    this.updateSouls(dt);
+    this.cauldronBubbles(world, dt, time);
 
     this.glow.update(dt);
     this.dust.update(dt);
@@ -383,33 +406,59 @@ export class Effects {
             );
           }
         }
-      } else if (kind === SHRINE) {
-        for (let k = 0; k < 40; k++) {
-          const a = Math.random() * Math.PI * 2;
-          const r = rnd(0.3, 1.2);
-          c1.setHex(0x7fe3ff).multiplyScalar(2.8);
-          this.glow.emit({
-            x: x + Math.cos(a) * r,
-            y: y + rnd(0, 1.5),
-            z: z + Math.sin(a) * r,
-            vx: -Math.sin(a) * 1.2,
-            vy: rnd(3, 8),
-            vz: Math.cos(a) * 1.2,
-            life: rnd(0.9, 1.5),
-            size: rnd(0.3, 0.55),
-            endSize: 0,
-            r: c1.r,
-            g: c1.g,
-            b: c1.b,
-            drag: 0.6,
-            shape: SHAPE_STAR,
-          });
-        }
-        this.flash(x, y + 2, z, 4, 0x9feeff, 2.5, 0.3);
+      } else if (kind === CAULDRON) {
+        // Ruh Kazanı patladı: yeşil alev sütunu, kıvılcım halkası, duman.
+        this.flash(x, y + 1.5, z, 7, 0x7dff9a, 3.2, 0.35);
+        this.sparks(x, y + 1.4, z, 46, 0x6dff8a, 3.4, 12, 0.32, 1.2, 6);
+        this.stars(x, y + 1.4, z, 30, 0xb0ffc0, 3, 6, 9, 0.6, 1.3);
+        this.puff(x, y + 1.2, z, 10, 0x2a3a2c, 0.65, 1.6, 1.4, 3, 2);
+        this.pulses.spawn(x, y, z, 9, 0x5dff7a);
+      } else if (kind === ALTAR) {
+        // Pakt: mor-kızıl parlama, yükselen kıvılcımlar ve kara duman.
+        this.flash(x, y + 1.5, z, 5, 0xd04aff, 3, 0.3);
+        this.sparks(x, y + 1.2, z, 30, 0xff3a6a, 3.2, 7, 0.24, 1, 3);
+        this.stars(x, y + 1.6, z, 20, 0xc77dff, 3, 2.5, 5, 0.5, 1.2);
+        this.puff(x, y + 0.8, z, 8, 0x1c1022, 0.7, 1.2, 1.2, 2.4, 1.6);
+        this.pulses.spawn(x, y, z, 5, 0xc040ff);
       } else if (kind === TORCH_FX) {
         this.sparks(x, y + 1.2, z, 22, 0xff7a20, 3.2, 6, 0.14, 1.1, 5);
         this.puff(x, y + 1.2, z, 4, 0x3a3634, 0.6, 0.5, 0.9, 1.2, 1.4);
         this.shards(x, y + 1, z, 5, [0x4a4a52, 0x6a5a48], 0.18);
+      }
+    });
+
+    this.soulCursor = world.soulFx.drain(this.soulCursor, (d, o) => {
+      if (this.souls.length >= MAX_SOULS) return;
+      const it = world.interactables;
+      const k = d[o + 3];
+      const tx = it.x[k];
+      const tz = it.z[k];
+      const dist = Math.hypot(tx - d[o], tz - d[o + 2]);
+      this.souls.push({
+        sx: d[o],
+        sy: d[o + 1],
+        sz: d[o + 2],
+        tx,
+        ty: world.terrain.heightAt(tx, tz) + 1.3,
+        tz,
+        t: 0,
+        dur: 0.35 + dist * 0.06,
+      });
+    });
+
+    this.goblinCursor = world.goblinFx.drain(this.goblinCursor, (d, o) => {
+      const [x, y, z, code] = [d[o], d[o + 1], d[o + 2], d[o + 3]];
+      if (code === GOBLIN_DROP) {
+        this.stars(x, y + 0.4, z, 6, 0xffd34a, 3, 2.4, 3, 0.4, 0.6);
+      } else if (code === GOBLIN_DEATH) {
+        this.flash(x, y + 0.8, z, 5, 0xffe08a, 3.2, 0.3);
+        this.stars(x, y + 0.8, z, 40, 0xffd34a, 3, 4, 7, 0.55, 1.2);
+        this.sparks(x, y + 0.8, z, 24, 0xffb020, 3, 8, 0.2, 0.8);
+        this.pulses.spawn(x, y, z, 6, 0xffcf4a);
+      } else {
+        // Çıkış / kaçış: duman bulutu ve birkaç altın kıvılcım.
+        this.puff(x, y + 0.6, z, 9, 0x8a8478, 0.6, 1, 1, 2.2, 1.4);
+        this.sparks(x, y + 0.8, z, 10, 0xffd34a, 2.6, 4, 0.16, 0.6);
       }
     });
 
@@ -425,6 +474,52 @@ export class Effects {
         this.stars(d[o], d[o + 1], d[o + 2], kind - 1 === PICKUP_HEAL ? 8 : 4, hex, 2.6, 1.6, 2.2, 0.5, 0.6);
       }
     });
+  }
+
+  /** Ruhlar kavis çizerek kazana uçar; arkalarında yeşil iz bırakır. */
+  private updateSouls(dt: number): void {
+    c1.setHex(0x7dff9a).multiplyScalar(2.4);
+    for (let i = this.souls.length - 1; i >= 0; i--) {
+      const s = this.souls[i];
+      s.t += dt;
+      const u = Math.min(1, s.t / s.dur);
+      const arc = Math.sin(u * Math.PI) * 2.2;
+      const x = s.sx + (s.tx - s.sx) * u;
+      const y = s.sy + (s.ty - s.sy) * u + arc;
+      const z = s.sz + (s.tz - s.sz) * u;
+      this.glow.emit({ x, y, z, life: 0.28, size: 0.42, endSize: 0, r: c1.r, g: c1.g, b: c1.b });
+      if (u >= 1) {
+        this.sparks(s.tx, s.ty, s.tz, 3, 0x7dff9a, 2.4, 3, 0.16, 0.35);
+        this.souls.splice(i, 1);
+      }
+    }
+  }
+
+  /** Dolu kazanlar köpürür (dolum arttıkça daha sık); etkin sunakların mumları mor parlar. */
+  private cauldronBubbles(world: World, dt: number, time: number): void {
+    const it = world.interactables;
+    for (let i = 0; i < it.count; i++) {
+      if (it.kind[i] === ALTAR && !it.used[i]) {
+        const y = world.terrain.heightAt(it.x[i], it.z[i]);
+        this.halo(it.x[i], y + 1.3, it.z[i], 2.6 + Math.sin(time * 6 + i) * 0.2, 0xb040ff, 0.9);
+        continue;
+      }
+      if (it.kind[i] !== CAULDRON || it.cooldown[i] > 0 || it.charge[i] <= 0) continue;
+      if (Math.random() > dt * (1 + it.charge[i] * 10)) continue;
+      const y = world.terrain.heightAt(it.x[i], it.z[i]) + 0.8 + it.charge[i] * 0.6;
+      this.stars(
+        it.x[i] + rnd(-0.5, 0.5),
+        y,
+        it.z[i] + rnd(-0.5, 0.5),
+        1,
+        0x8dffa8,
+        2.2,
+        0.3,
+        1.6,
+        0.35,
+        0.8,
+      );
+    }
   }
 
   /** Seviye atlama: oyuncunun çevresinde yükselen altın sarmal + yerde altın halka. */

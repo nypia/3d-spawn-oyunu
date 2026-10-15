@@ -3,7 +3,7 @@ import { CHEST_PLAIN, CHEST_TIERS } from '../data/chests';
 import { EVOLUTION_BY_WEAPON } from '../data/evolutions';
 import { HEROES } from '../data/heroes';
 import { ITEMS } from '../data/items';
-import { SHRINE_BONUSES } from '../data/shrines';
+import { PACTS } from '../data/pacts';
 import { TOME_INDEX, TOMES } from '../data/tomes';
 import { DebugOverlay } from '../debug/DebugOverlay';
 import type { GameAssets } from '../render/assets/loadAssets';
@@ -170,7 +170,8 @@ export class Game {
       if (this.state === 'levelup') this.reroll();
     });
     inp.onKey('Escape', () => {
-      if (this.state === 'playing') this.pause();
+      if (this.state === 'reward' && this.world.reward?.kind === 'pact') this.takeReward(-1);
+      else if (this.state === 'playing') this.pause();
       else if (this.state === 'paused') this.resume();
     });
     for (const [code, i] of [
@@ -181,7 +182,7 @@ export class Game {
     ] as const) {
       inp.onKey(code, () => {
         if (this.state === 'levelup') this.pick(i);
-        else if (this.state === 'reward' && this.world.reward?.kind === 'shrine') this.takeReward(i);
+        else if (this.state === 'reward' && this.world.reward?.kind === 'pact') this.takeReward(i);
       });
     }
     inp.onLockChange = (locked) => {
@@ -264,18 +265,14 @@ export class Game {
     if (!r) return;
     this.setState('reward');
     this.input.exitLock();
-    if (r.kind === 'shrine') {
-      this.screens.showShrine(
-        r.options.map((o) => {
-          const def = SHRINE_BONUSES[o.bonus];
-          return {
-            icon: def.icon,
-            title: def.describe(o.value),
-            rarity: o.rarity,
-            rarityName: RARITIES[o.rarity].name,
-          };
+    if (r.kind === 'pact') {
+      this.screens.showPact(
+        r.options.map((k) => {
+          const d = PACTS[k];
+          return { icon: d.icon, name: d.name, boon: d.boonText, bane: d.baneText };
         }),
         (i) => this.takeReward(i),
+        () => this.takeReward(-1),
       );
       return;
     }
@@ -394,7 +391,7 @@ export class Game {
     }
 
     this.renderer.render(this.world, dt, this.state === 'menu');
-    if (this.state !== 'menu') this.hud.update(this.world);
+    if (this.state !== 'menu') this.hud.update(this.world, this.renderer.rig.yaw);
     this.debug?.update(dt, this.world, this.renderer.renderer);
   }
 }

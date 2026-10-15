@@ -29,10 +29,10 @@ function firstOf(w: World, kind: number): number {
 }
 
 describe('ganimet', () => {
-  it('harita vazo, sandık ve tapınak içerir', () => {
+  it('harita vazo, sandık, Ruh Kazanı ve Lanet Sunağı içerir', () => {
     const w = arena();
     const kinds = new Set(Array.from(w.interactables.kind.subarray(0, w.interactables.count)));
-    expect(kinds.size).toBe(3);
+    expect(kinds.size).toBe(4);
   });
 
   it('altın yetmezse sandık açılmaz', () => {

@@ -245,6 +245,72 @@ body {
   opacity: 0.85;
 }
 
+.hud-banner.gold {
+  color: #fff3c4;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgb(120 82 10 / 85%) 18%,
+    rgb(120 82 10 / 85%) 82%,
+    transparent
+  );
+  border-color: rgb(255 211 77 / 60%);
+}
+
+.hud-banner.soul {
+  color: #e2ffe6;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgb(18 92 44 / 85%) 18%,
+    rgb(18 92 44 / 85%) 82%,
+    transparent
+  );
+  border-color: rgb(125 255 154 / 55%);
+}
+
+.hud-banner.pact {
+  color: #f6e2ff;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgb(82 16 92 / 86%) 18%,
+    rgb(82 16 92 / 86%) 82%,
+    transparent
+  );
+  border-color: rgb(208 74 255 / 55%);
+}
+
+/* Ekran dışındaki Hazine Goblini: merkez etrafında dönen ok + mesafe. */
+.goblin-arrow {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  pointer-events: none;
+  color: #ffd34d;
+  font-family: var(--font-display);
+  font-weight: 800;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.7);
+}
+
+.goblin-arrow-tip {
+  font-size: 26px;
+  line-height: 1;
+  filter: drop-shadow(0 0 6px rgb(255 190 40 / 80%));
+}
+
+.goblin-arrow-text {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: rgb(40 26 4 / 70%);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
 @keyframes banner-life {
   0% {
     opacity: 0;
@@ -980,6 +1046,37 @@ kbd {
     opacity: 0;
     transform: translateY(12px) scale(0.96);
   }
+}
+
+/* ---------------------------------------------------------------- Lanet Sunağı */
+
+.panel.pact {
+  background: linear-gradient(180deg, rgb(70 18 60 / 97%), rgb(26 10 30 / 97%));
+  border-color: rgb(208 74 255 / 35%);
+}
+
+.panel.pact h2 {
+  color: #f2c8ff;
+}
+
+.pact-card {
+  border-color: rgb(208 74 255 / 45%);
+  background: linear-gradient(180deg, #4a2050, #261228);
+}
+
+.pact-boon,
+.pact-bane {
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.pact-boon {
+  color: #7dff9a;
+}
+
+.pact-bane {
+  color: #ff7a96;
 }
 
 /* ---------------------------------------------------------------- Sandık çarkı */

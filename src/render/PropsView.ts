@@ -1,7 +1,6 @@
 import {
   AdditiveBlending,
   type BufferGeometry,
-  CircleGeometry,
   Color,
   DoubleSide,
   DynamicDrawUsage,
@@ -17,7 +16,8 @@ import {
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { Rng } from '../core/Rng';
 import { CHEST_BOSS, CHEST_PLAIN } from '../data/chests';
-import { SHRINE as SHRINE_CFG } from '../data/shrines';
+import { ALTAR as ALTAR_CFG, CAULDRON as CAULDRON_CFG } from '../data/landmarks';
+import { EF_SPECIAL } from '../sim/enemies/EnemyPool';
 import {
   PICKUP_BAG,
   PICKUP_CLOCK,
@@ -26,7 +26,7 @@ import {
   PICKUP_MAGNET,
   PICKUP_ROSARY,
 } from '../sim/pickups/PickupPool';
-import { CHEST, SHRINE, VASE } from '../sim/world/Interactables';
+import { ALTAR, CAULDRON, CHEST, VASE } from '../sim/world/Interactables';
 import type { World } from '../sim/world/World';
 import type { GameAssets } from './assets/loadAssets';
 import { texturedModel } from './assets/staticModels';
@@ -34,9 +34,11 @@ import {
   bagGeometry,
   beamGeometry,
   brazierGeometry,
+  cauldronGeometry,
   clockGeometry,
   flameGeometry,
   healGeometry,
+  liquidGeometry,
   magnetGeometry,
   rosaryGeometry,
 } from './shapes';
@@ -54,8 +56,14 @@ const CHEST_TINTS = [
   new Color(1.9, 0.55, 1.2),
   new Color(0.7, 1.7, 0.6),
 ];
-const SHRINE_USED = new Color(0.45, 0.45, 0.5);
-const SHRINE_GLOW = new Color(0x7fe3ff);
+const ALTAR_USED = new Color(0.42, 0.4, 0.46);
+const ALTAR_RING = new Color(1.3, 0.12, 1.6);
+const SOUL_RING = new Color(0.35, 1.2, 0.5);
+const SOUL_LOW = new Color(0.15, 0.55, 0.25);
+const SOUL_FULL = new Color(0.6, 3.2, 1);
+const SOUL_COLD = new Color(0.22, 0.2, 0.28);
+const GOBLIN_BEAM = new Color(0xffc23a);
+const tint = new Color();
 const BEAM_CAP = 32;
 /** Işık sütunu alan nadir pickup'lar ve renkleri. */
 const BEAM_COLORS: Partial<Record<number, Color>> = {
@@ -66,7 +74,7 @@ const BEAM_COLORS: Partial<Record<number, Color>> = {
 /** Pickup türü başına görsel boy. */
 const PICKUP_SCALE: Partial<Record<number, number>> = { [PICKUP_CLOCK]: 1.25, [PICKUP_ROSARY]: 1.25 };
 
-/** Tapınakların çevresine serpilen mezar taşları (yalnızca dekor). */
+/** Lanet Sunaklarının çevresine serpilen mezar taşları (yalnızca dekor). */
 const GRAVES = ['gravestone-round', 'gravestone-cross', 'gravestone-broken', 'gravestone-bevel'];
 
 /** Dokulu Kenney modeli → ölçeklenmiş instanced mesh (kendi colormap materyaliyle). */
@@ -82,13 +90,20 @@ function instancedModel(assets: GameAssets, key: string, scale: number, cap: num
   return m;
 }
 
-/** Tapınak: ortada dikilitaş, iki yanında mum öbekleri. */
-function shrineModel(assets: GameAssets): BufferGeometry {
-  const obelisk = texturedModel(assets.model('graveyard/pillar-obelisk')).geometry.scale(2.6, 2.6, 2.6);
-  const candle = (x: number) =>
-    texturedModel(assets.model('graveyard/candle-multiple')).geometry.scale(2, 2, 2).translate(x, 0, 0.4);
-  const g = mergeGeometries([obelisk, candle(-0.85), candle(0.85)]);
-  if (!g) throw new Error('tapınak modeli');
+/** Lanet Sunağı: taş sunak, üstünde ve iki yanında mum öbekleri. */
+function altarModel(assets: GameAssets): BufferGeometry {
+  const stone = texturedModel(assets.model('graveyard/altar-stone')).geometry.scale(2.4, 2.4, 2.4);
+  stone.computeBoundingBox();
+  const top = stone.boundingBox?.max.y ?? 0.5;
+  const candle = (x: number, y: number, z: number, s: number) =>
+    texturedModel(assets.model('graveyard/candle-multiple')).geometry.scale(s, s, s).translate(x, y, z);
+  const g = mergeGeometries([
+    stone,
+    candle(0, top, 0, 1.4),
+    candle(-1.25, 0, 0.5, 2),
+    candle(1.25, 0, -0.4, 2),
+  ]);
+  if (!g) throw new Error('sunak modeli');
   return g;
 }
 
@@ -106,12 +121,15 @@ function instanced(geo: BufferGeometry, cap: number, shadows: boolean, emissive 
   return m;
 }
 
-/** Vazolar, sandıklar, tapınaklar, meşaleler ve yerdeki pickup'lar. */
+/** Vazolar, sandıklar, Lanet Sunakları, Ruh Kazanları, meşaleler ve yerdeki pickup'lar. */
 export class PropsView {
   readonly root = new Group();
   private readonly vases: InstancedMesh;
   private readonly chests: InstancedMesh;
-  private readonly shrines: InstancedMesh;
+  private readonly altars: InstancedMesh;
+  private readonly cauldrons: InstancedMesh;
+  /** Kazan sıvısı: dolumla yükselir, dolarken parlar. */
+  private readonly liquids: InstancedMesh;
   private readonly graves: InstancedMesh[];
   private readonly braziers: InstancedMesh;
   private readonly flames: InstancedMesh;
@@ -120,24 +138,27 @@ export class PropsView {
   private readonly pickupCounts: number[] = [];
   /** Nadir pickup'ların üstündeki ışık sütunları (uzaktan görünsün). */
   private readonly beams: InstancedMesh;
-  /** Tapınak alanı halkası ve dolum diski. */
-  private readonly shrineRings: InstancedMesh;
-  private readonly shrineFills: InstancedMesh;
+  /** Yerdeki alan halkaları (kazanın ruh alanı, sunak). */
+  private readonly rings: InstancedMesh;
 
   constructor(shadows: boolean, assets: GameAssets) {
-    // Kenney modelleri (dokulu kitler): çömlek = vazo, sandık, dikilitaş + mumlar = tapınak.
+    // Kenney modelleri (dokulu kitler): çömlek = vazo, sandık, sunak taşı + mumlar = Lanet Sunağı.
     this.vases = instancedModel(assets, 'dungeon/pot', 1.8, 128, shadows);
     this.chests = instancedModel(assets, 'dungeon/chest', 2.2, 48, shadows);
     this.chests.setColorAt(0, WHITE);
-    this.shrines = new InstancedMesh(
-      shrineModel(assets),
-      texturedModel(assets.model('graveyard/pillar-obelisk')).material,
+    this.altars = new InstancedMesh(
+      altarModel(assets),
+      texturedModel(assets.model('graveyard/altar-stone')).material,
       16,
     );
-    this.shrines.instanceMatrix.setUsage(DynamicDrawUsage);
-    this.shrines.castShadow = shadows;
-    this.shrines.frustumCulled = false;
-    this.shrines.setColorAt(0, WHITE);
+    this.altars.instanceMatrix.setUsage(DynamicDrawUsage);
+    this.altars.castShadow = shadows;
+    this.altars.frustumCulled = false;
+    this.altars.setColorAt(0, WHITE);
+    this.cauldrons = instanced(cauldronGeometry(), 16, shadows);
+    (this.cauldrons.material as MeshLambertMaterial).side = DoubleSide;
+    this.liquids = new InstancedMesh(liquidGeometry(), new MeshBasicMaterial({ color: 0xffffff }), 16);
+    this.liquids.setColorAt(0, WHITE);
     this.graves = GRAVES.map((k) => instancedModel(assets, `graveyard/${k}`, 2, 64, shadows));
     this.braziers = instanced(brazierGeometry(), 16, shadows);
     this.flames = instanced(flameGeometry(), 16, false);
@@ -166,18 +187,13 @@ export class PropsView {
       BEAM_CAP,
     );
     this.beams.setColorAt(0, WHITE);
-    const flat = { color: 0x7fe3ff, transparent: true, depthWrite: false };
-    this.shrineRings = new InstancedMesh(
-      new RingGeometry(0.93, 1, 48).rotateX(-Math.PI / 2),
-      new MeshBasicMaterial({ ...flat, opacity: 0.75 }),
+    this.rings = new InstancedMesh(
+      new RingGeometry(0.96, 1, 64).rotateX(-Math.PI / 2),
+      new MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.55, depthWrite: false }),
       16,
     );
-    this.shrineFills = new InstancedMesh(
-      new CircleGeometry(1, 40).rotateX(-Math.PI / 2),
-      new MeshBasicMaterial({ ...flat, opacity: 0.22 }),
-      16,
-    );
-    for (const m of [this.shrineRings, this.shrineFills, this.beams]) {
+    this.rings.setColorAt(0, WHITE);
+    for (const m of [this.rings, this.beams, this.liquids]) {
       m.instanceMatrix.setUsage(DynamicDrawUsage);
       m.frustumCulled = false;
       m.count = 0;
@@ -185,35 +201,36 @@ export class PropsView {
     this.root.add(
       this.vases,
       this.chests,
-      this.shrines,
+      this.altars,
+      this.cauldrons,
+      this.liquids,
       ...this.graves,
       this.braziers,
       this.flames,
       ...this.pickupMeshes,
       this.beams,
-      this.shrineRings,
-      this.shrineFills,
+      this.rings,
     );
   }
 
-  /** Yeni dünya: tapınakların çevresine mezar taşları (seed'li, sabit). */
+  /** Yeni dünya: sunakların çevresine mezar taşları (seed'li, sabit). */
   setWorld(world: World): void {
     const rng = new Rng(world.seed ^ 0x6a7e);
     const counts = this.graves.map(() => 0);
     const it = world.interactables;
     for (let i = 0; i < it.count; i++) {
-      if (it.kind[i] !== SHRINE) continue;
-      const n = rng.int(3, 5);
+      if (it.kind[i] !== ALTAR) continue;
+      const n = rng.int(4, 6);
       for (let k = 0; k < n; k++) {
         const a = rng.range(0, Math.PI * 2);
-        const r = SHRINE_CFG.radius + rng.range(0.8, 2);
+        const r = ALTAR_CFG.radius + rng.range(1.2, 2.6);
         const x = it.x[i] + Math.sin(a) * r;
         const z = it.z[i] + Math.cos(a) * r;
         const v = rng.int(0, this.graves.length - 1);
         const mesh = this.graves[v];
         if (counts[v] >= mesh.instanceMatrix.count) continue;
         pos.set(x, world.terrain.heightAt(x, z) - 0.05, z);
-        // Mezar taşları tapınağa dönük, hafif eğri.
+        // Mezar taşları sunağa dönük, hafif eğri.
         quat.setFromAxisAngle(UP, Math.atan2(it.x[i] - x, it.z[i] - z) + rng.range(-0.3, 0.3));
         scl.setScalar(rng.range(0.85, 1.15));
         m4.compose(pos, quat, scl);
@@ -230,11 +247,20 @@ export class PropsView {
     const it = world.interactables;
     let nv = 0;
     let nc = 0;
-    let ns = 0;
+    let na = 0;
+    let nk = 0;
     let nr = 0;
+    const ring = (x: number, y: number, z: number, r: number, c: Color) => {
+      quat.identity();
+      pos.set(x, y + 0.06, z);
+      scl.setScalar(r);
+      m4.compose(pos, quat, scl);
+      this.rings.setMatrixAt(nr, m4);
+      this.rings.setColorAt(nr++, c);
+    };
     for (let i = 0; i < it.count; i++) {
       const kind = it.kind[i];
-      if (it.used[i] && kind !== SHRINE) continue;
+      if (it.used[i] && kind !== ALTAR) continue;
       const y = world.terrain.heightAt(it.x[i], it.z[i]);
       pos.set(it.x[i], y - 0.05, it.z[i]);
       quat.setFromAxisAngle(UP, it.rotation[i]);
@@ -251,33 +277,42 @@ export class PropsView {
         this.chests.setMatrixAt(nc, m4);
         this.chests.setColorAt(nc, CHEST_TINTS[tier] ?? WHITE);
         nc++;
-      } else if (kind === SHRINE) {
+      } else if (kind === ALTAR) {
         m4.compose(pos, quat, scl);
-        this.shrines.setMatrixAt(ns, m4);
-        this.shrines.setColorAt(ns, it.used[i] ? SHRINE_USED : SHRINE_GLOW);
-        ns++;
+        this.altars.setMatrixAt(na, m4);
+        this.altars.setColorAt(na++, it.used[i] ? ALTAR_USED : WHITE);
         if (!it.used[i]) {
-          // Alan halkası (hafif nabız) + dolum diski.
-          quat.identity();
-          pos.y = y + 0.08;
-          scl.setScalar(SHRINE_CFG.radius * (1 + Math.sin(time * 3) * 0.02));
-          m4.compose(pos, quat, scl);
-          this.shrineRings.setMatrixAt(nr, m4);
-          scl.setScalar(Math.max(0.001, SHRINE_CFG.radius * it.charge[i]));
-          m4.compose(pos, quat, scl);
-          this.shrineFills.setMatrixAt(nr, m4);
-          nr++;
+          const pulse = 1 + Math.sin(time * 3 + i) * 0.04;
+          ring(it.x[i], y, it.z[i], ALTAR_CFG.radius * pulse, ALTAR_RING);
         }
+      } else if (kind === CAULDRON) {
+        m4.compose(pos, quat, scl);
+        this.cauldrons.setMatrixAt(nk, m4);
+        // Sıvı dolumla yükselir; soğurken kararır, dolmaya yakın parlar.
+        const cold = it.cooldown[i] > 0;
+        const fill = cold ? 0 : Math.min(1, it.charge[i]);
+        quat.identity();
+        pos.set(it.x[i], y + 0.72 + fill * 0.58, it.z[i]);
+        scl.set(0.62 + fill * 0.26, 1, 0.62 + fill * 0.26);
+        m4.compose(pos, quat, scl);
+        this.liquids.setMatrixAt(nk, m4);
+        if (cold) tint.copy(SOUL_COLD);
+        else
+          tint
+            .copy(SOUL_LOW)
+            .lerp(SOUL_FULL, fill)
+            .multiplyScalar(1 + Math.sin(time * 5 + i) * 0.08 * fill);
+        this.liquids.setColorAt(nk++, tint);
+        if (!cold) ring(it.x[i], y, it.z[i], CAULDRON_CFG.radius, SOUL_RING);
       }
     }
     this.vases.count = nv;
     this.chests.count = nc;
-    this.shrines.count = ns;
-    this.shrineRings.count = nr;
-    this.shrineFills.count = nr;
-    this.shrineRings.instanceMatrix.needsUpdate = true;
-    this.shrineFills.instanceMatrix.needsUpdate = true;
-    for (const m of [this.vases, this.chests, this.shrines]) {
+    this.altars.count = na;
+    this.cauldrons.count = nk;
+    this.liquids.count = nk;
+    this.rings.count = nr;
+    for (const m of [this.vases, this.chests, this.altars, this.cauldrons, this.liquids, this.rings]) {
       m.instanceMatrix.needsUpdate = true;
       if (m.instanceColor) m.instanceColor.needsUpdate = true;
     }
@@ -310,6 +345,18 @@ export class PropsView {
         this.beams.setColorAt(nb, beam);
         nb++;
       }
+    }
+    // Hazine Goblininin üstünde altın ışık sütunu: uzaktan görünsün.
+    const e = world.enemies;
+    for (let i = 0; i < e.count && nb < BEAM_CAP; i++) {
+      if (e.dead[i] || !(e.flags[i] & EF_SPECIAL)) continue;
+      const w = 1.4 + Math.sin(time * 5) * 0.2;
+      pos.set(e.x[i], e.y[i] + 1.2, e.z[i]);
+      quat.identity();
+      scl.set(w, 1.6, w);
+      m4.compose(pos, quat, scl);
+      this.beams.setMatrixAt(nb, m4);
+      this.beams.setColorAt(nb++, GOBLIN_BEAM);
     }
     this.pickupMeshes.forEach((m, k) => {
       m.count = counts[k];

@@ -1,5 +1,5 @@
 /** breakFx'te meşale kırılması (Interactables türlerinden sonra gelir). */
-export const TORCH_FX = 3;
+export const TORCH_FX = 8;
 
 /** Kırılabilir meşaleler: küçük SoA havuz, swap-remove ile silinir. */
 export class Torches {

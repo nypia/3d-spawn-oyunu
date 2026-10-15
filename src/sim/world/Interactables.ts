@@ -5,10 +5,21 @@ import type { Obstacles } from './Obstacles';
 
 export const VASE = 0;
 export const CHEST = 1;
-export const SHRINE = 2;
+/** Ruh Kazanı: yakınındaki ölümlerle dolar, patlar, kazan sandığı bırakır. */
+export const CAULDRON = 2;
+/** Lanet Sunağı: güç + lanet paktı sunar. */
+export const ALTAR = 3;
+
+/** populate: kaç sandık, kazan, sunak ve vazo grubu. */
+export interface PopulateCounts {
+  chests: number;
+  cauldrons: number;
+  altars: number;
+  vaseGroups: number;
+}
 
 /**
- * Haritadaki etkileşimli nesneler: kırılabilir vazolar, sandıklar ve tapınaklar.
+ * Haritadaki etkileşimli nesneler: kırılabilir vazolar, sandıklar, Ruh Kazanları ve Lanet Sunakları.
  * Sayıları az (~100) olduğu için düz diziler yeterli; her tick doğrusal taranır.
  */
 export class Interactables {
@@ -23,8 +34,12 @@ export class Interactables {
   readonly free: Uint8Array;
   /** Sandık türü (CHEST_*: düz, elit, boss, kazan). */
   readonly tier: Uint8Array;
-  /** Tapınak dolum ilerlemesi (0..1). */
+  /** Kazan: ruh dolumu (0..1). */
   readonly charge: Float32Array;
+  /** Kazan: patlama sayısı · Sunak: 1 = reddedildi, oyuncunun uzaklaşması bekleniyor. */
+  readonly level: Uint8Array;
+  /** Kazan: patlamadan sonra kalan soğuma (s). */
+  readonly cooldown: Float32Array;
   readonly rotation: Float32Array;
 
   constructor(capacity: number) {
@@ -36,6 +51,8 @@ export class Interactables {
     this.free = new Uint8Array(capacity);
     this.tier = new Uint8Array(capacity);
     this.charge = new Float32Array(capacity);
+    this.level = new Uint8Array(capacity);
+    this.cooldown = new Float32Array(capacity);
     this.rotation = new Float32Array(capacity);
   }
 
@@ -49,6 +66,8 @@ export class Interactables {
     this.free[i] = free ? 1 : 0;
     this.tier[i] = CHEST_PLAIN;
     this.charge[i] = 0;
+    this.level[i] = 0;
+    this.cooldown[i] = 0;
     this.rotation[i] = rotation;
     return i;
   }
@@ -78,16 +97,9 @@ export class Interactables {
 
   /**
    * Haritaya seed'li yerleşim: düz zemin, engellerden ve birbirinden uzak, başlangıçtan en az 12 m.
-   * Vazolar 2–3'lü küçük gruplar halinde.
+   * Kazan ve sunaklar merkezden en az 30 m, birbirlerinden en az 45 m uzakta. Vazolar 2–3'lü gruplar.
    */
-  populate(
-    rng: Rng,
-    terrain: Heightmap,
-    obstacles: Obstacles,
-    chests: number,
-    shrines: number,
-    vaseGroups: number,
-  ): void {
+  populate(rng: Rng, terrain: Heightmap, obstacles: Obstacles, counts: PopulateCounts): void {
     const limit = terrain.playableHalf - 4;
     const n = [0, 0, 0];
     const tmp = new Float32Array(2);
@@ -104,19 +116,28 @@ export class Interactables {
       }
       return true;
     };
-    const place = (kind: number, total: number, clearance: number, minCenter: number) => {
+    const landmark = (x: number, z: number) => {
+      for (let k = 0; k < this.count; k++) {
+        if (this.kind[k] !== CAULDRON && this.kind[k] !== ALTAR) continue;
+        if ((this.x[k] - x) ** 2 + (this.z[k] - z) ** 2 < 45 * 45) return false;
+      }
+      return true;
+    };
+    const place = (kind: number, total: number, clearance: number, minCenter: number, spread = false) => {
       let placed = 0;
-      for (let tries = 0; tries < total * 40 && placed < total; tries++) {
+      for (let tries = 0; tries < total * 60 && placed < total; tries++) {
         const x = rng.range(-limit, limit);
         const z = rng.range(-limit, limit);
-        if (!ok(x, z, clearance, minCenter)) continue;
+        if (!ok(x, z, clearance, minCenter) || (spread && !landmark(x, z))) continue;
         this.add(kind, x, z, rng.range(0, Math.PI * 2));
         placed++;
       }
     };
-    place(SHRINE, shrines, 3, 25);
-    place(CHEST, chests, 1.5, 14);
+    place(CAULDRON, counts.cauldrons, 4, 30, true);
+    place(ALTAR, counts.altars, 4, 30, true);
+    place(CHEST, counts.chests, 1.5, 14);
     let groups = 0;
+    const vaseGroups = counts.vaseGroups;
     for (let tries = 0; tries < vaseGroups * 40 && groups < vaseGroups; tries++) {
       const cx = rng.range(-limit, limit);
       const cz = rng.range(-limit, limit);

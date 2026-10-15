@@ -13,13 +13,21 @@ import {
 } from '../../data/enemies';
 import { EVOLUTION_BY_WEAPON } from '../../data/evolutions';
 import { ITEM_FX, ITEM_INDEX, ITEMS } from '../../data/items';
-import { SHRINE, SHRINE_BONUSES } from '../../data/shrines';
+import { ALTAR, CAULDRON } from '../../data/landmarks';
 import { TOME_INDEX, TOMES, tomeValue } from '../../data/tomes';
 import { TORCH, TORCH_DROPS, type TorchDrop, torchDropWeights } from '../../data/torches';
 import { WEAPON_INDEX, WEAPONS, type WeaponBehavior, weaponMaxLevel } from '../../data/weapons';
 import { Blasts } from '../combat/Blasts';
 import { PF_GROUND_FOLLOW, PF_RETURNING, PF_RETURNS, ProjectilePool } from '../combat/ProjectilePool';
-import { EnemyPool, ST_ACT, ST_MOVE, ST_RECOVER, ST_WINDUP } from '../enemies/EnemyPool';
+import {
+  EF_NOLOOT,
+  EF_SPECIAL,
+  EnemyPool,
+  ST_ACT,
+  ST_MOVE,
+  ST_RECOVER,
+  ST_WINDUP,
+} from '../enemies/EnemyPool';
 import { SpawnDirector } from '../enemies/SpawnDirector';
 import { GemPool } from '../pickups/GemPool';
 import {
@@ -45,7 +53,8 @@ import {
   type WeaponInstance,
 } from '../weapons/Weapons';
 import { EventRing } from './EventRing';
-import { CHEST, Interactables, SHRINE as SHRINE_KIND, VASE } from './Interactables';
+import { ALTAR as ALTAR_KIND, CAULDRON as CAULDRON_KIND, CHEST, Interactables, VASE } from './Interactables';
+import { Landmarks } from './Landmarks';
 import { Obstacles } from './Obstacles';
 import { TORCH_FX, Torches } from './Torches';
 
@@ -57,12 +66,6 @@ export interface WorldOptions {
   startWeapon?: string;
 }
 
-export interface ShrineOption {
-  bonus: number;
-  rarity: Rarity;
-  value: number;
-}
-
 /** Sandıktan çıkan bir eşya. */
 export interface ItemDrop {
   item: number;
@@ -72,7 +75,8 @@ export interface ItemDrop {
 export type Reward =
   /** Sandık: `source` = sandık türü (CHEST_*), her eşya ayrı çarkta döner. */
   | { kind: 'item'; source: number; items: ItemDrop[] }
-  | { kind: 'shrine'; options: ShrineOption[] }
+  /** Lanet Sunağı: `options` = PACTS indeksleri; takeReward(−1) reddeder. */
+  | { kind: 'pact'; altar: number; options: number[] }
   /** Sandıktan evrim: `slot` = weapons dizisindeki silah. */
   | { kind: 'evolution'; slot: number };
 
@@ -166,6 +170,12 @@ export class World {
   readonly collectFx = new EventRing(64, 5);
   /** HUD duyuruları: tür (ANN_*), değer, ek */
   readonly announceFx = new EventRing(16, 3);
+  /** Kazana akan ruh: x,y,z (ölüm yeri),kazan indeksi,değer */
+  readonly soulFx = new EventRing(128, 5);
+  /** Hazine Goblini: x,y,z,kod (GOBLIN_*) */
+  readonly goblinFx = new EventRing(16, 4);
+  /** Ruh Kazanı, Lanet Sunağı, Hazine Goblini. */
+  readonly landmarks = new Landmarks();
   readonly blasts = new Blasts(48);
 
   enemyCap: number;
@@ -193,7 +203,7 @@ export class World {
   eliteKills = 0;
   chestPrice: number = BALANCE.loot.chestBasePrice;
   chestsOpened = 0;
-  /** Sandık/tapınak ödülü: doluysa oyun durur, oyuncu alır. */
+  /** Sandık/sunak ödülü: doluysa oyun durur, oyuncu alır. */
   reward: Reward | null = null;
   /** Sıradaki ödüller (ör. boss sandığında önce evrim, sonra eşyalar). */
   readonly rewardQueue: Reward[] = [];
@@ -237,7 +247,12 @@ export class World {
       spawnFlatRadius: A.spawnFlatRadius,
     });
     this.obstacles = new Obstacles(mapRng, this.terrain, 380, 140);
-    this.interactables.populate(mapRng, this.terrain, this.obstacles, 12, 8, 22);
+    this.interactables.populate(mapRng, this.terrain, this.obstacles, {
+      chests: 12,
+      cauldrons: 4,
+      altars: 3,
+      vaseGroups: 22,
+    });
 
     this.stats = new Stats({
       maxHp: PB.baseHp,
@@ -279,7 +294,8 @@ export class World {
     this.updateEnemyShots(dt);
     this.updateGems(dt);
     this.updatePickups(dt);
-    this.updateInteractables(dt);
+    this.updateInteractables();
+    this.landmarks.update(this, dt);
     this.updateTorches(dt);
     this.director.update(this, dt);
 
@@ -292,7 +308,7 @@ export class World {
     this.updateLodestone(dt);
 
     p.maxHp = this.stats.get('maxHp');
-    p.hp = Math.min(p.maxHp, p.hp + this.stats.get('regen') * dt);
+    this.heal(this.stats.get('regen') * dt);
     if (p.hp <= 0) {
       if (this.godMode) p.hp = p.maxHp;
       else if (this.itemCounts[ITEM_INDEX.phoenix] > 0) this.revive();
@@ -374,7 +390,7 @@ export class World {
         break;
       }
       case 'heal':
-        p.hp = Math.min(p.maxHp, p.hp + opt.amount);
+        this.heal(opt.amount);
         break;
     }
   }
@@ -385,23 +401,20 @@ export class World {
     else this.reward = r;
   }
 
-  /** Ödülü al: sandık eşyaları ya da tapınak bonusu (choice = seçilen seçenek). */
+  /** Ödülü al: sandık eşyaları, evrim ya da pakt (choice = seçilen pakt, −1 = reddet). */
   takeReward(choice = 0): void {
     const r = this.reward;
     if (!r) return;
     if (r.kind === 'item') for (const d of r.items) this.applyItem(d.item);
     else if (r.kind === 'evolution') this.evolveWeapon(r.slot);
-    else {
-      const o = r.options[Math.min(choice, r.options.length - 1)];
-      const def = SHRINE_BONUSES[o.bonus];
-      if (def.mode === 'mult') this.stats.addMult(def.stat, o.value);
-      else this.stats.addFlat(def.stat, o.value);
-      if (def.stat === 'maxHp') {
-        this.player.maxHp = this.stats.get('maxHp');
-        this.player.hp = Math.min(this.player.maxHp, this.player.hp + o.value);
-      }
-    }
+    else this.landmarks.takePact(this, r.altar, r.options, choice);
     this.reward = this.rewardQueue.shift() ?? null;
+  }
+
+  /** İyileşme (paktlar çarpanı düşürebilir). */
+  heal(amount: number): void {
+    const p = this.player;
+    p.hp = Math.min(p.maxHp, p.hp + amount * this.mods.healing);
   }
 
   /** Silah evrime hazır mı: maks seviye, henüz evrimleşmemiş ve eşleşen kitap en az Sv.1. */
@@ -431,21 +444,6 @@ export class World {
   tintOf(behavior: WeaponBehavior): number {
     for (const w of this.weapons) if (w.def.behavior === behavior) return w.def.tint ?? 0;
     return 0;
-  }
-
-  /** Tapınak için tekrarsız, nadirlik zarlı bonus seçenekleri. */
-  rollShrineOptions(): ShrineOption[] {
-    const luck = this.stats.get('luck');
-    const weights = SHRINE_BONUSES.map(() => 1);
-    const out: ShrineOption[] = [];
-    for (let k = 0; k < SHRINE.choices; k++) {
-      const bonus = this.rng.weightedIndex(weights);
-      if (bonus < 0) break;
-      weights[bonus] = 0;
-      const rarity = rollRarity(this.rng, luck);
-      out.push({ bonus, rarity, value: SHRINE_BONUSES[bonus].value * rarityMult(rarity) });
-    }
-    return out;
   }
 
   applyItem(index: number): void {
@@ -593,14 +591,13 @@ export class World {
   }
 
   private collectPickup(kind: number, value: number): void {
-    const p = this.player;
     switch (kind) {
       case PICKUP_GOLD:
       case PICKUP_BAG:
         this.gold += value * this.stats.get('goldGain');
         break;
       case PICKUP_HEAL:
-        p.hp = Math.min(p.maxHp, p.hp + BALANCE.loot.healAmount);
+        this.heal(BALANCE.loot.healAmount);
         break;
       case PICKUP_MAGNET:
         this.attract();
@@ -665,7 +662,7 @@ export class World {
   }
 
   /** Vazolara çarpınca kırılır; sandığa yürüyünce altın yetiyorsa açılır. */
-  private updateInteractables(dt: number): void {
+  private updateInteractables(): void {
     const it = this.interactables;
     const p = this.player;
     const L = BALANCE.loot;
@@ -691,30 +688,20 @@ export class World {
         }
         it.used[i] = 1;
         this.openChest(free ? it.tier[i] : CHEST_PLAIN, it.x[i], y, it.z[i]);
-      } else if (it.kind[i] === SHRINE_KIND) {
-        // İçinde durdukça dolar, çıkınca yavaşça boşalır.
-        if (level && d2 < SHRINE.radius * SHRINE.radius) {
-          it.charge[i] += dt / SHRINE.chargeTime;
-          if (it.charge[i] >= 1 && !this.reward) {
-            it.charge[i] = 1;
-            it.used[i] = 1;
-            this.breakFx.push(it.x[i], y, it.z[i], SHRINE_KIND, 0);
-            this.pushReward({ kind: 'shrine', options: this.rollShrineOptions() });
-          }
-        } else if (it.charge[i] > 0) {
-          it.charge[i] = Math.max(0, it.charge[i] - (dt * SHRINE.decayRate) / SHRINE.chargeTime);
-        }
       }
     }
   }
 
-  /** HUD ipucu için: içinde durulan tapınağın dolumu (yoksa null). */
-  nearbyShrine(): number | null {
+  /** HUD ipucu için: yakındaki kazan (dolum, soğuma) ya da sunak (yoksa null). */
+  nearbyLandmark(): { kind: number; fill: number; cooldown: number; used: boolean } | null {
     const it = this.interactables;
     const p = this.player;
     for (let i = 0; i < it.count; i++) {
-      if (it.used[i] || it.kind[i] !== SHRINE_KIND) continue;
-      if ((it.x[i] - p.x) ** 2 + (it.z[i] - p.z) ** 2 <= (SHRINE.radius + 2) ** 2) return it.charge[i];
+      const kind = it.kind[i];
+      if (kind !== CAULDRON_KIND && kind !== ALTAR_KIND) continue;
+      const r = kind === CAULDRON_KIND ? CAULDRON.radius + 1 : ALTAR.rearmDistance;
+      if ((it.x[i] - p.x) ** 2 + (it.z[i] - p.z) ** 2 > r * r) continue;
+      return { kind, fill: it.charge[i], cooldown: it.cooldown[i], used: it.used[i] === 1 };
     }
     return null;
   }
@@ -741,8 +728,7 @@ export class World {
       this.xpNext = xpToNext(this.level);
       this.pendingLevelUps++;
       if (bandages > 0) {
-        const p = this.player;
-        p.hp = Math.min(p.maxHp, p.hp + ITEM_FX.bandageHeal * bandages);
+        this.heal(ITEM_FX.bandageHeal * bandages);
       }
     }
   }
@@ -854,6 +840,14 @@ export class World {
             const tl = Math.hypot(tx, tz) || 1;
             ux = tx / tl;
             uz = tz / tl;
+            break;
+          }
+          case 'flee': {
+            // Hazine Goblini: oyuncudan kaçar; süresi dolar ya da çok uzaklaşırsa kaybolur.
+            if (!this.landmarks.goblinMove(this, i, dist, dt)) continue;
+            ux = -ux;
+            uz = -uz;
+            sp *= this.landmarks.goblinSpeed(this, i, dist);
             break;
           }
           case 'dasher': {
@@ -1009,6 +1003,7 @@ export class World {
       this.killEnemy(i);
       return;
     }
+    if (e.flags[i] & EF_SPECIAL) this.landmarks.goblinHit(this, i);
     const frost = this.itemCounts[ITEM_INDEX.frost];
     if (frost > 0 && this.rng.chance(Math.min(ITEM_FX.frostMaxChance, ITEM_FX.frostChance * frost))) {
       this.freezeEnemy(i, ITEM_FX.frostTime);
@@ -1022,6 +1017,14 @@ export class World {
     const x = e.x[i];
     const z = e.z[i];
     const gy = this.terrain.heightAt(x, z) + 0.35;
+    const yaw = Math.atan2(e.vx[i], e.vz[i]);
+    if (e.flags[i] & EF_NOLOOT) {
+      // Goblin: yalnızca altın; XP, sandık, ruh ve eşya tetikleri yok.
+      if (e.flags[i] & EF_SPECIAL) this.landmarks.goblinDeath(this, i);
+      this.deathFx.push(x, e.y[i] + e.hover[i], z, e.type[i], yaw, e.scale[i]);
+      return;
+    }
+    this.landmarks.feed(this, i);
     this.gems.add(x, gy, z, e.xp[i], this.player.x, this.player.z);
     if (e.elite[i]) {
       // Elit: ücretsiz ödül sandığı + biraz altın.
@@ -1034,15 +1037,14 @@ export class World {
     }
     const fang = this.itemCounts[ITEM_INDEX.fang];
     if (fang > 0 && this.rng.chance(ITEM_FX.fangChance * fang)) {
-      this.player.hp = Math.min(this.player.maxHp, this.player.hp + ITEM_FX.fangHeal);
+      this.heal(ITEM_FX.fangHeal);
     }
     const skull = this.itemCounts[ITEM_INDEX.skull];
     if (skull > 0 && this.rng.chance(ITEM_FX.skullChance * skull)) {
       // Patlamayı kuyruğa al (zincirleme patlamalar özyineleme yapmasın).
       this.addBlast(x, z, ITEM_FX.skullRadius, ITEM_FX.skullDamage, 3, 0.05);
     }
-    const yaw = Math.atan2(e.vx[i], e.vz[i]);
-    this.deathFx.push(e.x[i], e.y[i] + e.hover[i], e.z[i], e.type[i], yaw, e.scale[i]);
+    this.deathFx.push(x, e.y[i] + e.hover[i], z, e.type[i], yaw, e.scale[i]);
   }
 
   /** Patlayan düşmanın fitili bitti: oyuncu yakındaysa hasar alır. XP ve kill sayılmaz. */

@@ -52,6 +52,18 @@ function orbGeometry() {
   return build([[new IcosahedronGeometry(0.15, 1), 0xb45cff]]);
 }
 
+/** Goblinin elinde sallanan altın kesesi. */
+function sackGeometry() {
+  const sack = new IcosahedronGeometry(0.26, 1).scale(1, 1.1, 1).translate(0, -0.3, 0);
+  const tie = new TorusGeometry(0.08, 0.03, 4, 8).rotateX(Math.PI / 2).translate(0, -0.04, 0);
+  const coin = new CylinderGeometry(0.09, 0.09, 0.03, 8).rotateX(Math.PI / 2).translate(0, -0.3, 0.27);
+  return build([
+    [sack, 0xa8783a],
+    [tie, 0xffcf33],
+    [coin, 0xffcf33],
+  ]);
+}
+
 /** Kenney karakterinin sade yürüyüş + ölüm klipleri. */
 function walker(assets: GameAssets, key: string, height: number): BakedRig {
   return bakeGltf(assets.model(key), { height, clips: [{ name: 'walk' }, { name: 'die', loop: false }] });
@@ -94,6 +106,16 @@ function bake(assets: GameAssets, id: string, hover: number): BakedRig | null {
         attachments: [{ bone: 'arm-right', geometry: orbGeometry(), material: 1, glow: 1.6 }],
         extraMaterials: [new MeshLambertMaterial({ vertexColors: true, flatShading: true })],
       });
+    case 'goblin':
+      return bakeGltf(assets.model('dungeon/character-orc'), {
+        height: 1.2,
+        clips: [
+          { name: 'walk', source: 'sprint' },
+          { name: 'die', loop: false },
+        ],
+        attachments: [{ bone: 'arm-left', geometry: sackGeometry(), material: 1, glow: 0.35 }],
+        extraMaterials: [new MeshLambertMaterial({ vertexColors: true, flatShading: true })],
+      });
     case 'archer':
       return bakeGltf(assets.model('dungeon/character-orc'), {
         height: 1.9,
@@ -121,6 +143,7 @@ const STRIDE: Record<string, number> = {
   ghost: 2.6,
   vampire: 2.3,
   keeper: 2,
+  goblin: 2.4,
 };
 
 /** Hayalet yarı saydam ve hafif ışıklı (gece de seçilsin). */

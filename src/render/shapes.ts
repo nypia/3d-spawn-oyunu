@@ -201,3 +201,41 @@ export function rosaryGeometry(): BufferGeometry {
     [beads, 0xc9a24a],
   ]);
 }
+
+/** Ruh Kazanı: üç ayaklı demir kazan, altında odunlar (~1,4 m). Sıvı ayrı çizilir (dolum seviyesi). */
+export function cauldronGeometry(): BufferGeometry {
+  // Kürenin alt %65'i: ağzı yukarıda açık kazan.
+  const body = new SphereGeometry(1, 14, 9, 0, Math.PI * 2, Math.PI * 0.35, Math.PI * 0.65)
+    .scale(1, 0.85, 1)
+    .translate(0, 1.0, 0);
+  const rimY = 1.0 + Math.cos(Math.PI * 0.35) * 0.85;
+  const rimR = Math.sin(Math.PI * 0.35);
+  const rim = new TorusGeometry(rimR, 0.09, 6, 18).rotateX(Math.PI / 2).translate(0, rimY, 0);
+  const parts: Part[] = [
+    [body, 0x34363f],
+    [rim, 0x4b4f5c],
+  ];
+  for (let k = 0; k < 3; k++) {
+    const a = (k / 3) * Math.PI * 2;
+    parts.push([
+      new CylinderGeometry(0.07, 0.1, 0.45, 5).translate(Math.sin(a) * 0.62, 0.22, Math.cos(a) * 0.62),
+      0x2a2b31,
+    ]);
+  }
+  for (let k = 0; k < 2; k++) {
+    parts.push([new BoxGeometry(1.4, 0.16, 0.16).rotateY(k * 1.4 + 0.3).translate(0, 0.08, 0), 0x6b4423]);
+  }
+  // Kulplar.
+  for (const s of [-1, 1]) {
+    parts.push([
+      new TorusGeometry(0.16, 0.04, 4, 8).rotateY(Math.PI / 2).translate(s * (rimR + 0.1), rimY - 0.1, 0),
+      0x4b4f5c,
+    ]);
+  }
+  return build(parts);
+}
+
+/** Kazanın içindeki sıvı yüzeyi (y = 0'da, birim yarıçap). */
+export function liquidGeometry(): BufferGeometry {
+  return new CylinderGeometry(1, 1, 0.04, 16);
+}

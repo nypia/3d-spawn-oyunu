@@ -25,7 +25,10 @@ Oyun tasarımı, mimari ve yol haritası: **[docs/GDD.md](docs/GDD.md)**
   (Anka Tüyü, Yankı Yüzüğü, Buz Kristali, Roket Çizme…). Elitler ücretsiz sandık düşürür.
 - **Meşaleler:** çevrende belirir, kırınca altın kesesi, tavuk, **mıknatıs** (XP ve altını
   çeker), **Saat** (düşmanları dondurur) ya da **Tespih** (çevreyi temizler) düşer.
-- **Tapınaklar:** içinde 4 sn dur, 3 kalıcı bonustan birini seç.
+- **Ruh Kazanları:** yakınında öldürdüğün düşmanların ruhları kazana akar; dolunca patlar ve
+  şanslı bir kazan sandığı bırakır.
+- **Lanet Sunakları:** güç + kalıcı bir lanet içeren iki paktdan birini seç ya da reddet.
+- **Hazine Goblini:** ara sıra çıkar ve kaçar; vurdukça altın saçar, yakalarsan altın yağmuru.
 - **Rehber** (duraklat ekranında): tüm eşyalar ve evrimler.
 - Hasar sayıları, kayma ve zıplama ile Megabonk tarzı hareket.
 - PC (klavye + fare) ve **dokunmatik** kontroller.
@@ -46,10 +49,10 @@ npm run dev        # http://localhost:5173
 | Space | Zıpla |
 | Shift / C | Kay: yokuş aşağı hızlanırsın, kayarken zıplarsan momentum korunur |
 | Q / E | Kamerayı döndür |
-| 1 / 2 / 3 / 4 | Kart seç (seviye atlama, tapınak) |
+| 1 / 2 / 3 / 4 | Kart seç (seviye atlama, pakt) |
 | R | Kartları yenile |
-| E / Enter | Sandık eşyasını al |
-| Esc | Duraklat |
+| E / Enter | Sandık çarkını atlat, eşyayı al |
+| Esc | Duraklat · paktı reddet |
 
 **Dokunmatik:** ekranın sol yarısında sürükle → koş, sağ yarısında sürükle → kamera.
 ZIPLA ve KAY (basılı tut) butonları sağ altta, duraklat sağ üstte.

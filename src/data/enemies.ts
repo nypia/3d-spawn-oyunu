@@ -291,6 +291,23 @@ export const ENEMIES: readonly EnemyDef[] = [
     scale: 1,
     ranged: KEEPER,
   },
+  {
+    // Çizelgeden doğmaz: Landmarks ara sıra çıkarır (bkz. data/landmarks GOBLIN).
+    id: 'goblin',
+    name: 'Hazine Goblini',
+    hp: 260,
+    speed: 6,
+    damage: 0,
+    radius: 0.45,
+    height: 1.2,
+    xp: 0,
+    cost: 0,
+    hover: 0,
+    knockbackResist: 0.6,
+    behavior: 'flee',
+    role: 'special',
+    scale: 1,
+  },
 ];
 
 export const ENEMY_INDEX: Record<string, number> = Object.fromEntries(ENEMIES.map((e, i) => [e.id, i]));
