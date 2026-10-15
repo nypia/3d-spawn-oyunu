@@ -204,6 +204,72 @@ body {
   }
 }
 
+/* Büyük duyuru şeridi: dalga olayı, boss, Kan Ayı. */
+.hud-banner {
+  position: absolute;
+  top: 17%;
+  left: 50%;
+  transform: translateX(-50%);
+  min-width: min(440px, 86vw);
+  padding: 8px 28px 10px;
+  text-align: center;
+  pointer-events: none;
+  color: #fff4e0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgb(120 30 16 / 82%) 18%,
+    rgb(120 30 16 / 82%) 82%,
+    transparent
+  );
+  border-top: 2px solid rgb(255 150 90 / 55%);
+  border-bottom: 2px solid rgb(255 150 90 / 55%);
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.7);
+}
+
+.hud-banner.show {
+  animation: banner-life 2.6s ease-out forwards;
+}
+
+.banner-title {
+  font-family: var(--font-display);
+  font-size: 30px;
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: 0.5px;
+}
+
+.banner-sub {
+  font-size: 15px;
+  font-weight: 700;
+  opacity: 0.85;
+}
+
+@keyframes banner-life {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) scaleX(0.4);
+  }
+
+  10% {
+    opacity: 1;
+    transform: translateX(-50%) scaleX(1.04);
+  }
+
+  16% {
+    transform: translateX(-50%) scaleX(1);
+  }
+
+  85% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-8px);
+  }
+}
+
 .hud-loadout {
   position: absolute;
   top: max(36px, calc(env(safe-area-inset-top) + 26px));
@@ -1152,6 +1218,14 @@ body.touch .hp-text {
     flex-wrap: wrap;
     justify-content: center;
     padding: 12px;
+  }
+
+  .banner-title {
+    font-size: 22px;
+  }
+
+  .banner-sub {
+    font-size: 13px;
   }
 }
 

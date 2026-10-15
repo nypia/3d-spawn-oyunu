@@ -5,6 +5,7 @@ import {
   Color,
   DynamicDrawUsage,
   Group,
+  IcosahedronGeometry,
   InstancedMesh,
   Matrix4,
   Mesh,
@@ -15,8 +16,9 @@ import {
   Vector3,
 } from 'three';
 import { BALANCE } from '../data/balance';
-import { ENEMIES, EXPLODER } from '../data/enemies';
+import { ENEMIES, EXPLODER, SHOT_ORB } from '../data/enemies';
 import { GEM_TIERS, gemTier } from '../data/gems';
+import { ST_ACT, ST_WINDUP } from '../sim/enemies/EnemyPool';
 import { OBSTACLE_TREE } from '../sim/world/Obstacles';
 import type { World } from '../sim/world/World';
 import type { GameAssets } from './assets/loadAssets';
@@ -132,6 +134,9 @@ export class WorldView {
   private readonly blobs: BlobShadows;
   private readonly gems: InstancedMesh;
   private readonly arrows: InstancedMesh;
+  /** Bekçi küreleri: parlak çekirdek + saydam hale. */
+  private readonly orbs: InstancedMesh;
+  private readonly orbHalos: InstancedMesh;
   private readonly aura: Group;
   private readonly auraRing: Mesh;
   private readonly auraDisc: Mesh;
@@ -189,7 +194,25 @@ export class WorldView {
       256,
       false,
     );
-    this.root.add(this.gems, this.aura, this.arrows);
+    this.orbs = instanced(
+      new IcosahedronGeometry(0.32, 1),
+      new MeshBasicMaterial({ color: new Color(1.9, 0.75, 3.2) }),
+      256,
+      false,
+    );
+    this.orbHalos = instanced(
+      new IcosahedronGeometry(0.62, 2),
+      new MeshBasicMaterial({
+        color: 0x9a40ff,
+        transparent: true,
+        opacity: 0.35,
+        depthWrite: false,
+        blending: AdditiveBlending,
+      }),
+      256,
+      false,
+    );
+    this.root.add(this.gems, this.aura, this.arrows, this.orbs, this.orbHalos);
   }
 
   /** Yeni run: araziyi ve statik dekoru yeniden kur. */
@@ -244,7 +267,7 @@ export class WorldView {
     for (const c of this.decor) c.cull(world.player.x, world.player.z);
     this.updateEnemies(world, time, dt);
     this.updateGems(world, time);
-    this.updateArrows(world);
+    this.updateArrows(world, time);
     this.updateDeaths(world);
 
     const p = world.player;
@@ -288,10 +311,15 @@ export class WorldView {
     const type = e.type[i];
     const def = ENEMIES[type];
     const k = this.lookCounts[type]++;
-    pos.set(e.x[i], e.y[i] + e.hover[i], e.z[i]);
+    // Hayalet hafifçe aşağı yukarı süzülür.
+    const bob = def.behavior === 'phase' ? Math.sin(time * 2.6 + e.phase[i]) * 0.12 : 0;
+    pos.set(e.x[i], e.y[i] + e.hover[i] + bob, e.z[i]);
     const p = world.player;
+    const windup = !!def.dash && e.state[i] === ST_WINDUP;
     const yaw =
-      def.behavior === 'ranged' ? Math.atan2(p.x - e.x[i], p.z - e.z[i]) : Math.atan2(e.vx[i], e.vz[i]);
+      def.behavior === 'ranged' || windup
+        ? Math.atan2(p.x - e.x[i], p.z - e.z[i])
+        : Math.atan2(e.vx[i], e.vz[i]);
     quat.setFromAxisAngle(UP, yaw);
     scl.setScalar(e.scale[i]);
     m4.compose(pos, quat, scl);
@@ -302,10 +330,16 @@ export class WorldView {
     const fusing = !!look.fuse && e.timer[i] >= 0;
     const blink = fusing && !frozen && Math.floor(time * 12) % 2 === 0;
     crowd.setColorAt(k, frozen ? ICE_TINT : blink ? FUSE_FLASH : e.elite[i] ? ELITE_TINT : WHITE);
-    // Okçu atıştan hemen önce yayı çeker; diğerleri yürüdükleri yol kadar adım atar.
-    const draw = 0.6;
+    // Okçu/bekçi atıştan hemen önce yayı çeker ya da küreyi kaldırır; vampir çömelip atılır; diğerleri
+    // yürüdükleri yol kadar adım atar.
+    const draw = def.ranged?.castTime ?? 0.6;
     if (look.fuse && fusing) {
       crowd.setAnim(k, look.fuse, EXPLODER.fuse - e.timer[i], flash);
+    } else if (look.windup && windup && def.dash) {
+      const f = 1 - e.timer[i] / def.dash.windup;
+      crowd.setAnim(k, look.windup, f * look.windup.duration, flash);
+    } else if (look.dash && def.dash && e.state[i] === ST_ACT) {
+      crowd.setAnim(k, look.dash, time * 1.6, flash);
     } else if (look.shoot && !frozen && e.timer[i] >= 0 && e.timer[i] < draw) {
       crowd.setAnim(k, look.shoot, ((draw - e.timer[i]) / draw) * look.shoot.duration, flash);
     } else {
@@ -337,11 +371,26 @@ export class WorldView {
     }
   }
 
-  private updateArrows(world: World): void {
+  private updateArrows(world: World, time: number): void {
     const s = world.enemyShots;
     let k = 0;
+    let o = 0;
     for (let j = 0; j < s.count; j++) {
       if (s.dead[j]) continue;
+      if (s.kind[j] === SHOT_ORB) {
+        // Küre: nabız gibi atan çekirdek, dönen hale; son yarım saniyede söner.
+        const fade = Math.min(1, s.life[j] / 0.5);
+        const pulse = (1 + Math.sin(time * 14 + j) * 0.12) * fade;
+        pos.set(s.x[j], s.y[j], s.z[j]);
+        quat.setFromAxisAngle(UP, time * 3 + j);
+        scl.setScalar(pulse);
+        m4.compose(pos, quat, scl);
+        this.orbs.setMatrixAt(o, m4);
+        scl.setScalar(pulse * (1.1 + Math.sin(time * 9 + j * 2) * 0.15));
+        m4.compose(pos, quat, scl);
+        this.orbHalos.setMatrixAt(o++, m4);
+        continue;
+      }
       arrowDir.set(s.vx[j], s.vy[j], s.vz[j]).normalize();
       quat.setFromUnitVectors(ARROW_FWD, arrowDir);
       pos.set(s.x[j], s.y[j], s.z[j]);
@@ -351,6 +400,10 @@ export class WorldView {
     }
     this.arrows.count = k;
     this.arrows.instanceMatrix.needsUpdate = true;
+    this.orbs.count = o;
+    this.orbs.instanceMatrix.needsUpdate = true;
+    this.orbHalos.count = o;
+    this.orbHalos.instanceMatrix.needsUpdate = true;
   }
 
   private updateGems(world: World, time: number): void {

@@ -1,6 +1,15 @@
 import { Rng } from '../../core/Rng';
 import { BALANCE, xpToNext } from '../../data/balance';
-import { ELITE, ENEMIES, EXPLODER, type RangedParams, REGULAR_TYPES, SHOT_ORB } from '../../data/enemies';
+import {
+  type DashParams,
+  ELITE,
+  ENEMIES,
+  EXPLODER,
+  type PhaseParams,
+  type RangedParams,
+  REGULAR_TYPES,
+  SHOT_ORB,
+} from '../../data/enemies';
 import { EVOLUTION_BY_WEAPON } from '../../data/evolutions';
 import { ITEM_FX, ITEM_INDEX, ITEMS } from '../../data/items';
 import { SHRINE, SHRINE_BONUSES } from '../../data/shrines';
@@ -9,7 +18,7 @@ import { TORCH, TORCH_DROPS, type TorchDrop, torchDropWeights } from '../../data
 import { WEAPON_INDEX, WEAPONS, type WeaponBehavior, weaponMaxLevel } from '../../data/weapons';
 import { Blasts } from '../combat/Blasts';
 import { PF_GROUND_FOLLOW, PF_RETURNING, PF_RETURNS, ProjectilePool } from '../combat/ProjectilePool';
-import { EnemyPool } from '../enemies/EnemyPool';
+import { EnemyPool, ST_ACT, ST_MOVE, ST_RECOVER, ST_WINDUP } from '../enemies/EnemyPool';
 import { SpawnDirector } from '../enemies/SpawnDirector';
 import { GemPool } from '../pickups/GemPool';
 import {
@@ -789,6 +798,52 @@ export class World {
             }
             break;
           }
+          case 'phase': {
+            // Hayalet: yana dalgalanarak süzülür (engellerden geçer, aşağıda).
+            const ph = def.phase as PhaseParams;
+            const wv = Math.sin(this.time * ph.weaveFreq + e.phase[i] * 3) * ph.weaveAmp;
+            const tx = ux - uz * wv;
+            const tz = uz + ux * wv;
+            const tl = Math.hypot(tx, tz) || 1;
+            ux = tx / tl;
+            uz = tz / tl;
+            break;
+          }
+          case 'dasher': {
+            const dash = def.dash as DashParams;
+            const st = e.state[i];
+            e.timer[i] -= dt;
+            if (st === ST_MOVE) {
+              if (e.timer[i] <= 0 && dist >= dash.triggerMin && dist <= dash.triggerMax) {
+                e.state[i] = ST_WINDUP;
+                e.timer[i] = dash.windup;
+              }
+            } else if (st === ST_WINDUP) {
+              // Durup oyuncuyu süzer; hazırlık bitince o anki yöne kilitlenir.
+              sp = 0;
+              e.ax[i] = ux;
+              e.az[i] = uz;
+              if (e.timer[i] <= 0) {
+                e.state[i] = ST_ACT;
+                e.timer[i] = dash.time;
+              }
+            } else if (st === ST_ACT) {
+              ux = e.ax[i];
+              uz = e.az[i];
+              sp = dash.speed;
+              if (e.timer[i] <= 0) {
+                e.state[i] = ST_RECOVER;
+                e.timer[i] = dash.recover;
+              }
+            } else {
+              sp *= 0.2;
+              if (e.timer[i] <= 0) {
+                e.state[i] = ST_MOVE;
+                e.timer[i] = dash.cooldown * this.rng.range(0.8, 1.2);
+              }
+            }
+            break;
+          }
           default:
             break;
         }
@@ -836,7 +891,10 @@ export class World {
       let nx = x + (vx + e.kx[i]) * dt + sx;
       let nz = z + (vz + e.kz[i]) * dt + sz;
 
-      this.obstacles.resolve(nx, nz, e.radius[i], tmp);
+      if (def.behavior === 'phase') {
+        tmp[0] = nx;
+        tmp[1] = nz;
+      } else this.obstacles.resolve(nx, nz, e.radius[i], tmp);
       nx = this.terrain.clampToPlayable(tmp[0]);
       nz = this.terrain.clampToPlayable(tmp[1]);
       e.x[i] = nx;
@@ -878,7 +936,8 @@ export class World {
     }
     if (frozen) return;
     e.contactCd[i] = PB.contactCooldown;
-    const dealt = this.hurtPlayer(e.damage[i]);
+    const dash = ENEMIES[e.type[i]].dash;
+    const dealt = this.hurtPlayer(e.damage[i] * (dash && e.state[i] === ST_ACT ? dash.damageMul : 1));
     const thorns = this.itemCounts[ITEM_INDEX.thorns];
     if (thorns > 0 && dealt > 0) {
       this.damageEnemy(i, (dealt * ITEM_FX.thornsMult * thorns) / this.stats.get('damage'), -ux, -uz);

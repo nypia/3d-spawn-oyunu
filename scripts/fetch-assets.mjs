@@ -50,6 +50,11 @@ const KITS = [
     anims: CHARACTER_ANIMS,
     models: [
       'character-skeleton',
+      'character-zombie',
+      'character-ghost',
+      'character-vampire',
+      'character-keeper',
+      'altar-stone',
       'pillar-obelisk',
       'gravestone-round',
       'gravestone-cross',
@@ -284,7 +289,7 @@ yayınlanmıştır. Atıf zorunlu değildir, ama emeğine teşekkür ederiz.
 ${KITS.map((k) => `| ${k.title} | ${k.models.length} model${k.texture ? ' + renk dokusu' : ''} | ${k.page} |`).join('\n')}
 
 Modeller \`npm run fetch-assets\` ile indirilip küçültülür (dış doku bağlantıları ve kullanılmayan animasyonlar
-silinir). Balçık, Yarasa, Patlayan ve Golem gibi diğer modeller koddan üretilir (\`src/render\`).
+silinir). Balçık, Yarasa, Patlayan, Golem ve Ruh Kazanı gibi diğer modeller koddan üretilir (\`src/render\`).
 
 ## Yazı tipleri
 

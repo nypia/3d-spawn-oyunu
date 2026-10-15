@@ -30,6 +30,10 @@ const DEATH: Record<string, { colors: [number, number]; n: number; size: number;
   exploder: { colors: [0x2b2d3a, 0x45495c], n: 5, size: 0.2, spark: 0xff8a3d },
   archer: { colors: [0x4f8a5b, 0x7a5230], n: 6, size: 0.2 },
   golem: { colors: [0x9a8b78, 0x6f665a], n: 9, size: 0.32, spark: 0x6fe3ff },
+  zombie: { colors: [0x6aa84f, 0x8c86c8], n: 7, size: 0.22 },
+  ghost: { colors: [0xe8e6ff, 0xb9b4ff], n: 6, size: 0.2, spark: 0xc8c0ff },
+  vampire: { colors: [0x2a2030, 0xb3243a], n: 7, size: 0.2, spark: 0xff3a5a },
+  keeper: { colors: [0x9a5b2e, 0x3f8f5a], n: 7, size: 0.22, spark: 0xc06bff },
 };
 
 /** Toplanan pickup → ışıltı rengi. */

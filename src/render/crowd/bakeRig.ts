@@ -70,6 +70,8 @@ export interface Attachment {
   geometry: BufferGeometry;
   /** `materials` dizisindeki indeks (varsayılan 0). */
   material?: number;
+  /** Kendi renginde ışıma (bloom'da parlar; ör. bekçinin büyü küresi). */
+  glow?: number;
 }
 
 const DEFAULT_FPS = 30;
@@ -219,7 +221,7 @@ export function bakeGltf(model: ModelAsset, opts: BakeGltfOptions): BakedRig {
       .clone()
       .applyMatrix4(new Matrix4().makeScale(1 / s, 1 / s, 1 / s))
       .translate(tip.x, tip.y, tip.z);
-    parts.push(normalizeAttributes(g, slots.length, 0));
+    parts.push(normalizeAttributes(g, slots.length, a.glow ?? 0));
     slots.push({ kind: 'node', node, restInverse: inv });
     partMaterial.push(a.material ?? 0);
   }

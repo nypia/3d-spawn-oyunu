@@ -6,12 +6,12 @@ yayınlanmıştır. Atıf zorunlu değildir, ama emeğine teşekkür ederiz.
 | Paket | Kullanılan | Kaynak |
 |---|---|---|
 | Mini Characters | 4 model + renk dokusu | https://kenney.nl/assets/mini-characters |
-| Graveyard Kit | 7 model + renk dokusu | https://kenney.nl/assets/graveyard-kit |
+| Graveyard Kit | 12 model + renk dokusu | https://kenney.nl/assets/graveyard-kit |
 | Mini Dungeon | 4 model + renk dokusu | https://kenney.nl/assets/mini-dungeon |
 | Nature Kit | 33 model | https://kenney.nl/assets/nature-kit |
 
 Modeller `npm run fetch-assets` ile indirilip küçültülür (dış doku bağlantıları ve kullanılmayan animasyonlar
-silinir). Balçık, Yarasa, Patlayan ve Golem gibi diğer modeller koddan üretilir (`src/render`).
+silinir). Balçık, Yarasa, Patlayan, Golem ve Ruh Kazanı gibi diğer modeller koddan üretilir (`src/render`).
 
 ## Yazı tipleri
 

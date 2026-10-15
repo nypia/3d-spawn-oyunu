@@ -1,4 +1,10 @@
-import { CylinderGeometry, MeshLambertMaterial, TorusGeometry } from 'three';
+import {
+  CylinderGeometry,
+  IcosahedronGeometry,
+  type Material,
+  MeshLambertMaterial,
+  TorusGeometry,
+} from 'three';
 import { ENEMIES } from '../../data/enemies';
 import type { GameAssets } from '../assets/loadAssets';
 import { build } from '../shapes';
@@ -7,8 +13,8 @@ import { CrowdMesh } from './CrowdMesh';
 import { batRig, bombRig, golemRig, slimeRig } from './proceduralRigs';
 
 /**
- * Düşman türü → animasyonlu kalabalık modeli: İskelet ve Okçu Kenney modelleri, Balçık, Yarasa, Patlayan ve
- * Golem koddan çizilmiş rig'ler.
+ * Düşman türü → animasyonlu kalabalık modeli: İskelet, Zombi, Hayalet, Vampir, Bekçi ve Okçu Kenney
+ * modelleri; Balçık, Yarasa, Patlayan ve Golem koddan çizilmiş rig'ler.
  */
 export interface EnemyLook {
   crowd: CrowdMesh;
@@ -18,6 +24,9 @@ export interface EnemyLook {
   shoot?: BakedClip;
   /** Patlayan: fitil yanarken şişme. */
   fuse?: BakedClip;
+  /** Vampir: atılmadan önce çömelme ve atılırken koşu. */
+  windup?: BakedClip;
+  dash?: BakedClip;
   /** Bir yürüme döngüsünde alınan yol (m): animasyon hızı gerçek yürüyüşe bağlı. */
   stride: number;
 }
@@ -38,6 +47,16 @@ function bowGeometry() {
   ]);
 }
 
+/** Bekçinin elinde parlayan mor büyü küresi. */
+function orbGeometry() {
+  return build([[new IcosahedronGeometry(0.15, 1), 0xb45cff]]);
+}
+
+/** Kenney karakterinin sade yürüyüş + ölüm klipleri. */
+function walker(assets: GameAssets, key: string, height: number): BakedRig {
+  return bakeGltf(assets.model(key), { height, clips: [{ name: 'walk' }, { name: 'die', loop: false }] });
+}
+
 function bake(assets: GameAssets, id: string, hover: number): BakedRig | null {
   switch (id) {
     case 'slime':
@@ -49,9 +68,31 @@ function bake(assets: GameAssets, id: string, hover: number): BakedRig | null {
     case 'golem':
       return bakeProcedural(golemRig());
     case 'skeleton':
-      return bakeGltf(assets.model('graveyard/character-skeleton'), {
-        height: 1.75,
-        clips: [{ name: 'walk' }, { name: 'die', loop: false }],
+      return walker(assets, 'graveyard/character-skeleton', 1.75);
+    case 'zombie':
+      return walker(assets, 'graveyard/character-zombie', 1.8);
+    case 'ghost':
+      return walker(assets, 'graveyard/character-ghost', 1.6);
+    case 'vampire':
+      return bakeGltf(assets.model('graveyard/character-vampire'), {
+        height: 1.9,
+        clips: [
+          { name: 'walk' },
+          { name: 'windup', source: 'crouch', loop: false },
+          { name: 'dash', source: 'sprint' },
+          { name: 'die', loop: false },
+        ],
+      });
+    case 'keeper':
+      return bakeGltf(assets.model('graveyard/character-keeper'), {
+        height: 1.9,
+        clips: [
+          { name: 'walk', overlay: { source: 'holding-right', bones: ['arm-right'] } },
+          { name: 'shoot', source: 'holding-right-shoot', loop: false },
+          { name: 'die', loop: false },
+        ],
+        attachments: [{ bone: 'arm-right', geometry: orbGeometry(), material: 1, glow: 1.6 }],
+        extraMaterials: [new MeshLambertMaterial({ vertexColors: true, flatShading: true })],
       });
     case 'archer':
       return bakeGltf(assets.model('dungeon/character-orc'), {
@@ -76,7 +117,21 @@ const STRIDE: Record<string, number> = {
   exploder: 1.4,
   archer: 2.3,
   golem: 2.2,
+  zombie: 1.7,
+  ghost: 2.6,
+  vampire: 2.3,
+  keeper: 2,
 };
+
+/** Hayalet yarı saydam ve hafif ışıklı (gece de seçilsin). */
+function makeGhostly(mat: Material | Material[]): void {
+  for (const m of Array.isArray(mat) ? mat : [mat]) {
+    m.transparent = true;
+    m.opacity = 0.62;
+    m.depthWrite = false;
+    if (m instanceof MeshLambertMaterial) m.emissive.setHex(0x2a2c55);
+  }
+}
 
 export function buildEnemyLooks(assets: GameAssets, capacity: number): (EnemyLook | null)[] {
   return ENEMIES.map((def) => {
@@ -84,12 +139,15 @@ export function buildEnemyLooks(assets: GameAssets, capacity: number): (EnemyLoo
     if (!rig) return null;
     const crowd = new CrowdMesh(rig, capacity);
     crowd.name = `enemy:${def.id}`;
+    if (def.behavior === 'phase') makeGhostly(crowd.material);
     return {
       crowd,
       walk: crowd.clip('walk'),
       die: crowd.clip('die'),
       shoot: rig.clips.shoot,
       fuse: rig.clips.fuse,
+      windup: rig.clips.windup,
+      dash: rig.clips.dash,
       stride: STRIDE[def.id] ?? 2,
     };
   });

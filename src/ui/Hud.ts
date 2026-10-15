@@ -1,6 +1,9 @@
 import { BALANCE } from '../data/balance';
+import { ENEMIES, ENEMY_INDEX } from '../data/enemies';
 import { ITEMS } from '../data/items';
 import { TOMES } from '../data/tomes';
+import { WAVE_EVENTS } from '../data/waves';
+import { ANN_EVENT } from '../sim/world/announce';
 import type { World } from '../sim/world/World';
 import { formatTime, h } from './dom';
 
@@ -27,6 +30,14 @@ export class Hud {
   private lastFlash = -1;
   /** Kısa süreli duyuru (Anka Tüyü dirilişi vb.). */
   private readonly toast = h('div.hud-toast', { 'data-testid': 'toast' });
+  /** Büyük duyuru şeridi (dalga olayları, boss, Kan Ayı); sırayla gösterilir. */
+  private readonly banner = h('div.hud-banner', { 'data-testid': 'banner' });
+  private readonly bannerTitle = h('div.banner-title');
+  private readonly bannerSub = h('div.banner-sub');
+  private readonly bannerQueue: Announcement[] = [];
+  private bannerUntil = 0;
+  private annWorld: World | null = null;
+  private annCursor = 0;
   private lastLoadoutKey = '';
   private lastText = { level: '', timer: '', kills: '', gold: '', hp: '', hint: '', toast: '' };
 
@@ -43,11 +54,14 @@ export class Hud {
       this.loadout,
       this.hint,
       this.toast,
+      this.banner,
       h('div.hp-bar', {}, this.hpFill, this.hpText),
     );
     parent.append(this.el);
     this.hint.style.display = 'none';
     this.toast.style.display = 'none';
+    this.banner.append(this.bannerTitle, this.bannerSub);
+    this.banner.style.display = 'none';
     this.setVisible(false);
   }
 
@@ -85,6 +99,8 @@ export class Hud {
       world.revivedAt >= 0 && world.time - world.revivedAt < 2.5 ? '🦅 Anka Tüyü: küllerinden doğdun!' : '';
     if (toast !== this.lastText.toast) this.toast.style.display = toast ? '' : 'none';
     this.setText('toast', this.toast, toast);
+
+    this.updateBanner(world);
 
     const chest = world.nearbyChest();
     const shrine = chest ? null : world.nearbyShrine();
@@ -143,11 +159,64 @@ export class Hud {
     }
   }
 
+  private updateBanner(world: World): void {
+    if (world !== this.annWorld) {
+      // Yeni run: baştan oku (HUD açılmadan önce yazılan duyurular da gösterilsin).
+      this.annWorld = world;
+      this.annCursor = 0;
+      this.bannerQueue.length = 0;
+    }
+    this.annCursor = world.announceFx.drain(this.annCursor, (d, o) => {
+      const a = announcement(d[o], d[o + 1], d[o + 2]);
+      if (a) this.bannerQueue.push(a);
+    });
+    const now = performance.now();
+    if (now < this.bannerUntil) return;
+    const next = this.bannerQueue.shift();
+    if (!next) {
+      if (this.banner.style.display !== 'none') this.banner.style.display = 'none';
+      return;
+    }
+    this.bannerTitle.textContent = next.title;
+    this.bannerSub.textContent = next.sub;
+    this.banner.className = `hud-banner ${next.style}`;
+    this.banner.style.display = '';
+    // Animasyonu yeniden başlat.
+    void this.banner.offsetWidth;
+    this.banner.classList.add('show');
+    this.bannerUntil = now + next.ms;
+  }
+
   private setText(key: keyof Hud['lastText'], el: HTMLElement, text: string): void {
     if (this.lastText[key] === text) return;
     this.lastText[key] = text;
     el.textContent = text;
   }
+}
+
+interface Announcement {
+  title: string;
+  sub: string;
+  /** CSS sınıfı: event | boss | blood | gold … */
+  style: string;
+  ms: number;
+}
+
+const EVENT_VERB = {
+  ring: 'etrafını sarıyor!',
+  swarm: 'küme halinde geliyor!',
+  horde: 'duvar gibi yürüyor!',
+};
+
+function announcement(kind: number, value: number, extra: number): Announcement | null {
+  if (kind === ANN_EVENT) {
+    const ev = WAVE_EVENTS[value];
+    if (!ev) return null;
+    const enemy = ENEMIES[ENEMY_INDEX[ev.enemy]];
+    const sub = `${extra || ev.count} ${enemy.name} ${EVENT_VERB[ev.kind]}`;
+    return { title: `⚠ ${ev.name}`, sub, style: 'event', ms: 2600 };
+  }
+  return null;
 }
 
 function slot(icon: string, level: number | string, title: string, state = ''): HTMLElement {

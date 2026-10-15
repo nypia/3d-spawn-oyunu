@@ -2,13 +2,11 @@ import type { Rng } from '../../core/Rng';
 import { BALANCE } from '../../data/balance';
 import { ELITE, ENEMIES, ENEMY_INDEX } from '../../data/enemies';
 import { CYCLE, WAVE_EVENTS, type WaveEvent, waveWeights } from '../../data/waves';
+import { ANN_EVENT } from '../world/announce';
 import type { World } from '../world/World';
 import { EF_BOSS, EF_SPECIAL } from './EnemyPool';
 
 const S = BALANCE.spawn;
-
-/** announceFx türü: temalı dalga olayı (değer = WAVE_EVENTS indeksi). */
-export const ANN_EVENT = 0;
 
 /**
  * Zaman çizelgeli spawn direktörü:
@@ -128,7 +126,7 @@ export class SpawnDirector {
     if (ev.kind === 'ring') this.spawnRing(world, type, n, ev.radius ?? S.ringRadius, cap);
     else if (ev.kind === 'swarm') this.spawnSwarm(world, type, n, cap);
     else this.spawnHorde(world, type, n, cap);
-    world.announceFx.push(ANN_EVENT, index, 0);
+    world.announceFx.push(ANN_EVENT, index, n);
   }
 
   spawnAroundPlayer(world: World, type: number, elite = false): boolean {

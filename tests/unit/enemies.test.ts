@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { BALANCE } from '../../src/data/balance';
-import { ELITE, ENEMIES, ENEMY_INDEX } from '../../src/data/enemies';
+import { ELITE, ENEMIES, ENEMY_INDEX, SHOT_ORB, VAMPIRE_DASH } from '../../src/data/enemies';
+import { ST_ACT } from '../../src/sim/enemies/EnemyPool';
 import { NO_INPUT } from '../../src/sim/player/Player';
 import { World } from '../../src/sim/world/World';
 
@@ -103,5 +104,75 @@ describe('temas', () => {
       w.step(NO_INPUT, DT);
     }
     expect(p.hp).toBe(p.maxHp);
+  });
+});
+
+describe('yeni yaratıklar', () => {
+  it('Vampir hazırlanır, oyuncuya atılır ve vurur', () => {
+    const w = arena();
+    const p = w.player;
+    w.spawnEnemy(ENEMY_INDEX.vampire, p.x + 8, p.z);
+    let dashed = false;
+    let maxSpeed = 0;
+    for (let t = 0; t < 2; t += DT) {
+      const x0 = w.enemies.x[0];
+      const z0 = w.enemies.z[0];
+      w.step(NO_INPUT, DT);
+      if (w.enemies.count === 0) break;
+      if (w.enemies.state[0] === ST_ACT) dashed = true;
+      maxSpeed = Math.max(maxSpeed, Math.hypot(w.enemies.x[0] - x0, w.enemies.z[0] - z0) / DT);
+    }
+    expect(dashed).toBe(true);
+    expect(maxSpeed).toBeGreaterThan(VAMPIRE_DASH.speed * 0.8);
+    expect(p.hp).toBeLessThan(p.maxHp);
+  });
+
+  it('Bekçi küresi oyuncuyu izler', () => {
+    const w = arena();
+    const p = w.player;
+    w.spawnEnemy(ENEMY_INDEX.keeper, p.x, p.z + 18);
+    w.enemies.timer[0] = 0;
+    w.step(NO_INPUT, DT);
+    const s = w.enemyShots;
+    expect(s.count).toBe(1);
+    expect(s.kind[0]).toBe(SHOT_ORB);
+    // Oyuncu yana kaçar: küre dönüp onu kovalar.
+    const angleTo = () => {
+      const want = Math.atan2(p.x - s.x[0], p.z - s.z[0]);
+      const cur = Math.atan2(s.vx[0], s.vz[0]);
+      return Math.abs(Math.atan2(Math.sin(want - cur), Math.cos(want - cur)));
+    };
+    p.x += 5;
+    const before = angleTo();
+    for (let t = 0; t < 0.6; t += DT) w.step(NO_INPUT, DT);
+    expect(before).toBeGreaterThan(0.2);
+    expect(angleTo()).toBeLessThan(before * 0.5);
+  });
+
+  it('Hayalet engellerin içinden geçer, zombi geçemez', () => {
+    const w = arena();
+    const o = w.obstacles;
+    // Oyuncuya yakın, büyükçe bir engel seç.
+    let k = 0;
+    for (let i = 1; i < o.count; i++)
+      if (o.radius[i] > 1 && Math.hypot(o.x[i], o.z[i]) < Math.hypot(o.x[k], o.z[k])) k = i;
+    const r = o.radius[k];
+    const crossInside = (type: number) => {
+      const t = arena();
+      const p = t.player;
+      t.spawnEnemy(type, o.x[k] - r - 2, o.z[k]);
+      let inside = false;
+      for (let s = 0; s < 240 && t.enemies.count > 0; s++) {
+        p.x = o.x[k] + r + 3;
+        p.z = o.z[k];
+        p.y = t.terrain.heightAt(p.x, p.z) + 3; // temas olmasın
+        p.vy = 0;
+        t.step(NO_INPUT, DT);
+        if (Math.hypot(t.enemies.x[0] - o.x[k], t.enemies.z[0] - o.z[k]) < r * 0.5) inside = true;
+      }
+      return inside;
+    };
+    expect(crossInside(ENEMY_INDEX.ghost)).toBe(true);
+    expect(crossInside(ENEMY_INDEX.zombie)).toBe(false);
   });
 });
