@@ -21,3 +21,20 @@ silinir). Balçık, Yarasa, Patlayan, Golem ve Ruh Kazanı gibi diğer modeller 
 | Nunito (Vernon Adams) | Metin | SIL Open Font License 1.1 | https://github.com/googlefonts/nunito |
 
 Yazı tipleri [Fontsource](https://fontsource.org) paketlerinden alınır ve derlemeye gömülür.
+
+## Sesler
+
+Efektler [Kenney](https://kenney.nl) ses paketlerinden (**CC0 1.0**), müzikler Juhani Junkala'nın
+"Chiptune Adventures" albümünden (**CC0 1.0**, OpenGameArt). `npm run fetch-audio` ile indirilip mono
+MP3'e çevrilir.
+
+| Kaynak | Kullanım | Lisans | Bağlantı |
+|---|---|---|---|
+| Kenney Casino Audio | efektler | CC0 1.0 | https://kenney.nl/assets/casino-audio |
+| Kenney RPG Audio | efektler | CC0 1.0 | https://kenney.nl/assets/rpg-audio |
+| Kenney Impact Sounds | efektler | CC0 1.0 | https://kenney.nl/assets/impact-sounds |
+| Kenney Interface Sounds | efektler | CC0 1.0 | https://kenney.nl/assets/interface-sounds |
+| Kenney Music Jingles | efektler | CC0 1.0 | https://kenney.nl/assets/music-jingles |
+| Kenney Digital Audio | efektler | CC0 1.0 | https://kenney.nl/assets/digital-audio |
+| Kenney Sci-fi Sounds | efektler | CC0 1.0 | https://kenney.nl/assets/sci-fi-sounds |
+| Juhani Junkala — Chiptune Adventures | menü, gündüz, Kan Ayı ve boss müzikleri | CC0 1.0 | https://opengameart.org/content/4-chiptunes-adventure |

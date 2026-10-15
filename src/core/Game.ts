@@ -1,3 +1,6 @@
+import { AudioManager } from '../audio/AudioManager';
+import { SoundEvents } from '../audio/SoundEvents';
+import type { MusicTrack } from '../audio/sounds';
 import { BALANCE } from '../data/balance';
 import { CHEST_PLAIN, CHEST_TIERS } from '../data/chests';
 import { EVOLUTION_BY_WEAPON } from '../data/evolutions';
@@ -44,8 +47,16 @@ export class Game {
   private readonly quality: QualitySettings;
   private readonly flags: Flags;
   private readonly simInput: PlayerInput = { moveX: 0, moveZ: 0, jump: false, slide: false };
-  /** Sandık çarkının ses kancaları (ses yöneticisi bağlar). */
-  private readonly rewardSounds: RewardSounds = {};
+  /** Ses: efektler, müzik ve sim olaylarından ses üretimi. */
+  readonly audio = new AudioManager();
+  private readonly soundEvents = new SoundEvents();
+  /** Sandık çarkının ses kancaları. */
+  private readonly rewardSounds: RewardSounds = {
+    open: () => this.audio.play('creak'),
+    tick: () => this.audio.play('tick', { rate: 0.9 + Math.random() * 0.25 }),
+    reveal: (r) => this.revealSound(r),
+  };
+  private time = 0;
   private acc = 0;
   private lastHp = 0;
   private lastShake = 0;
@@ -75,10 +86,57 @@ export class Game {
 
     this.world = this.createWorld();
     this.bindKeys();
+    this.bindAudio(root);
     this.showStart();
 
     // Test ve hata ayıklama için konsoldan erişim.
     (window as unknown as { game: Game }).game = this;
+  }
+
+  /**
+   * Tarayıcılar sesi ancak bir kullanıcı etkileşiminden sonra açar: ilk dokunuş/tıklama/tuşta açılır.
+   * Menü butonları tıklama sesi çalar (kartlar kendi seçim sesini çalar).
+   */
+  private bindAudio(root: HTMLElement): void {
+    const unlock = () => this.audio.unlock();
+    for (const ev of ['pointerdown', 'keydown', 'touchstart']) {
+      document.addEventListener(ev, unlock, { capture: true, passive: true });
+    }
+    root.addEventListener(
+      'click',
+      (e) => {
+        const b = (e.target as HTMLElement).closest('button');
+        if (b && !b.classList.contains('card')) this.audio.play('click');
+      },
+      { capture: true },
+    );
+    this.hud.onSound = () => this.toggleMute();
+    this.hud.setMuted(this.audio.settings.muted);
+  }
+
+  private toggleMute(): void {
+    const muted = this.audio.toggleMute();
+    this.hud.setMuted(muted);
+  }
+
+  /** Nadirliğe göre açılış sesi; efsanevide müzik kısılır. */
+  private revealSound(rarity: number): void {
+    const a = this.audio;
+    if (rarity >= 3) {
+      a.duck(2);
+      a.play('revealLegend');
+    } else if (rarity === 2) a.play('revealEpic');
+    else if (rarity === 1) a.play('revealRare');
+    else a.play('revealCommon');
+  }
+
+  /** Durum ve dünyaya göre çalması gereken müzik. */
+  private musicFor(): MusicTrack | null {
+    if (this.state === 'menu') return 'menu';
+    if (this.state === 'gameover') return null;
+    const w = this.world;
+    if (w.bosses.active.length > 0) return 'boss';
+    return w.cycle > 1 ? 'blood' : 'day';
   }
 
   /** Seçilen maceracı tarayıcıda hatırlanır (gizli pencerede depolama olmayabilir). */
@@ -171,6 +229,7 @@ export class Game {
     inp.onKey('KeyR', () => {
       if (this.state === 'levelup') this.reroll();
     });
+    inp.onKey('KeyM', () => this.toggleMute());
     inp.onKey('Escape', () => {
       if (this.state === 'reward' && this.world.reward?.kind === 'pact') this.takeReward(-1);
       else if (this.state === 'playing') this.pause();
@@ -212,12 +271,24 @@ export class Game {
   private pause(): void {
     this.setState('paused');
     this.input.exitLock();
+    const a = this.audio;
     this.screens.showPause(
       this.world,
       () => this.resume(),
       () => {
         this.world = this.createWorld();
         this.startRun();
+      },
+      {
+        sfx: a.settings.sfx,
+        music: a.settings.music,
+        muted: a.settings.muted,
+        setVolume: (kind, v) => a.setVolume(kind, v),
+        toggleMute: () => {
+          const m = a.toggleMute();
+          this.hud.setMuted(m);
+          return m;
+        },
       },
     );
   }
@@ -231,6 +302,7 @@ export class Game {
   private pick(i: number): void {
     const offer = this.world.offer;
     if (!offer || i >= offer.length) return;
+    this.audio.play('select');
     this.world.choose(i);
     if (this.world.offer) this.showLevelUp();
     else this.resume();
@@ -249,7 +321,9 @@ export class Game {
       {
         pick: (i) => this.pick(i),
         banish: (i) => {
-          if (w.banish(i)) this.showLevelUp();
+          if (!w.banish(i)) return;
+          this.audio.play('banish');
+          this.showLevelUp();
         },
         reroll: () => this.reroll(),
         skip: () => {
@@ -292,6 +366,7 @@ export class Game {
         },
         () => this.takeReward(0),
       );
+      this.revealSound(3);
       return;
     }
     const tier = CHEST_TIERS[r.source] ?? CHEST_TIERS[0];
@@ -325,7 +400,9 @@ export class Game {
   }
 
   private reroll(): void {
-    if (this.world.reroll()) this.showLevelUp();
+    if (!this.world.reroll()) return;
+    this.audio.play('reroll');
+    this.showLevelUp();
   }
 
   /**
@@ -401,6 +478,12 @@ export class Game {
     }
 
     this.renderer.render(this.world, dt, this.state === 'menu');
+    this.time += dt;
+    const p = this.world.player;
+    this.audio.setListener(p.x, p.z, this.renderer.rig.yaw);
+    if (this.state !== 'menu') this.soundEvents.update(this.world, this.audio, dt, this.time);
+    this.audio.setMusic(this.musicFor());
+    this.audio.setPaused(this.state === 'paused');
     if (this.state !== 'menu') this.hud.update(this.world, this.renderer.rig.yaw);
     this.debug?.update(dt, this.world, this.renderer.renderer);
   }

@@ -16,7 +16,8 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "diag": "vitest run --config vitest.diag.config.ts",
-    "fetch-assets": "node scripts/fetch-assets.mjs"
+    "fetch-assets": "node scripts/fetch-assets.mjs",
+    "fetch-audio": "node scripts/fetch-audio.mjs"
   },
   "dependencies": {
     "@fontsource-variable/baloo-2": "5.3.0",

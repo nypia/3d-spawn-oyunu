@@ -66,6 +66,9 @@ export class Hud {
   private lastBossKey = '';
   private annCursor = 0;
   private lastLoadoutKey = '';
+  /** 🔊 düğmesi (sessiz aç/kapat). */
+  private readonly soundBtn = h('button.hud-sound', { 'data-testid': 'sound', 'aria-label': 'Ses' }, '🔊');
+  onSound: (() => void) | null = null;
   private lastText = { level: '', timer: '', kills: '', gold: '', hp: '', hint: '', toast: '', phase: '' };
 
   constructor(parent: HTMLElement) {
@@ -78,7 +81,14 @@ export class Hud {
       h('div.xp-bar', {}, this.xpFill, this.level),
       this.timer,
       this.phase,
-      h('div.hud-kills', {}, h('span', {}, '💀 '), this.kills, h('span.hud-gold', {}, '🪙 ', this.gold)),
+      h(
+        'div.hud-kills',
+        {},
+        this.soundBtn,
+        h('span', {}, '💀 '),
+        this.kills,
+        h('span.hud-gold', {}, '🪙 ', this.gold),
+      ),
       this.loadout,
       this.hint,
       this.toast,
@@ -93,7 +103,16 @@ export class Hud {
     this.banner.append(this.bannerTitle, this.bannerSub);
     this.banner.style.display = 'none';
     this.goblinArrow.style.display = 'none';
+    this.soundBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.onSound?.();
+    });
     this.setVisible(false);
+  }
+
+  setMuted(muted: boolean): void {
+    this.soundBtn.textContent = muted ? '🔇' : '🔊';
+    this.soundBtn.classList.toggle('muted', muted);
   }
 
   setVisible(v: boolean): void {

@@ -134,6 +134,8 @@ export const PULSE_BLOOD = 4;
 const BLOOD_MOON_PURGE = 45;
 /** collectFx türü: XP taşı (pickup'lar 1 + PICKUP_* olarak yazılır). */
 export const COLLECT_GEM = 0;
+/** shotFx: düşman atışları SHOT_ENEMY + SHOT_ARROW / SHOT_ORB olarak yazılır. */
+export const SHOT_ENEMY = 10;
 
 /**
  * Tüm oyun durumu ve kuralları. Render'dan tamamen bağımsızdır (three.js import etmez),
@@ -186,6 +188,8 @@ export class World {
   readonly landmarks = new Landmarks();
   /** Boss saldırılarının gecikmeli tehlike alanları. */
   readonly hazards = new Hazards(96);
+  /** Atış sesi: x,y,z,tür (PROJ_* ya da SHOT_ENEMY + SHOT_*) */
+  readonly shotFx = new EventRing(64, 4);
   /** Tetiklenen tehlike: x,z,x2,z2,tür,yarıçap */
   readonly hazardFx = new EventRing(64, 6);
   readonly bosses = new BossController();
@@ -1137,6 +1141,7 @@ export class World {
     const orb = r.shot === SHOT_ORB;
     const ox = e.x[i];
     const oz = e.z[i];
+    this.shotFx.push(ox, e.y[i], oz, SHOT_ENEMY + r.shot);
     // Ok göğüs hizasından oyuncuya nişan alır; küre yerin üstünde süzülür.
     const oy = orb ? this.terrain.heightAt(ox, oz) + 1.1 : e.y[i] + e.hover[i] + 1.2 * e.scale[i];
     const dx = p.x - ox;
@@ -1315,6 +1320,7 @@ export class World {
     const pr = this.projectiles;
     const i = pr.add();
     if (i < 0) return;
+    this.shotFx.push(o.x, o.y, o.z, o.kind);
     pr.kind[i] = o.kind;
     pr.x[i] = o.x;
     pr.y[i] = o.y;

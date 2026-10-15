@@ -6,7 +6,7 @@
 //  - CREDITS.md yeniden yazılır.
 // Çıktılar repoya commit edilir; build ve CI bu betiği çalıştırmaz. Kullanım: npm run fetch-assets
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const CACHE = '.cache/kenney';
@@ -300,5 +300,9 @@ silinir). Balçık, Yarasa, Patlayan, Golem ve Ruh Kazanı gibi diğer modeller 
 
 Yazı tipleri [Fontsource](https://fontsource.org) paketlerinden alınır ve derlemeye gömülür.
 `;
-writeFileSync('CREDITS.md', credits);
+// fetch-audio'nun yazdığı ses bölümü korunur.
+const audio = existsSync('CREDITS.md')
+  ? readFileSync('CREDITS.md', 'utf8').split('\n## Sesler')[1]
+  : undefined;
+writeFileSync('CREDITS.md', audio ? `${credits}\n## Sesler${audio}` : credits);
 console.log(`toplam ${(total / 1024).toFixed(0)} KB`);

@@ -54,6 +54,20 @@ test('oyun açılır, oynanır ve seviye atlama çalışır', async ({ page }, t
   // Biraz düşman biriksin.
   await page.keyboard.press('KeyJ');
   await page.waitForTimeout(1500);
+
+  // Ses: OYNA ile açıldı, efektler çözüldü ve çalıyor, müzik gündüz parçası.
+  const audio = () =>
+    page.evaluate(() => {
+      const a = (
+        window as unknown as {
+          game: { audio: { ctx: AudioContext | null; played: number; current: { track: string } | null } };
+        }
+      ).game.audio;
+      return { state: a.ctx?.state, played: a.played, track: a.current?.track };
+    });
+  await expect.poll(async () => (await audio()).state).toBe('running');
+  await expect.poll(async () => (await audio()).played, { timeout: 20_000 }).toBeGreaterThan(0);
+  expect((await audio()).track).toBe('day');
   await page.screenshot({ path: testInfo.outputPath('2-gameplay.png') });
 
   // Hile tuşu ile seviye atla → kart seç.

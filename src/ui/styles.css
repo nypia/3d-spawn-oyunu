@@ -140,6 +140,53 @@ body {
   text-shadow: var(--outline);
 }
 
+/* 🔊 / 🔇: kill kutusunun başında, tıklanabilir. */
+.hud-sound {
+  margin: 0 6px 0 -6px;
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  pointer-events: auto;
+  vertical-align: 1px;
+}
+
+.hud-sound.muted {
+  opacity: 0.6;
+}
+
+/* Duraklatma: ses ayarları */
+.audio-settings {
+  display: grid;
+  gap: 8px;
+  margin: 10px auto 16px;
+  max-width: 320px;
+}
+
+.audio-row {
+  display: grid;
+  grid-template-columns: 90px 1fr;
+  align-items: center;
+  gap: 10px;
+  font-weight: 800;
+  text-align: left;
+}
+
+.audio-row input {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+.audio-mute {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
 .vignette,
 .hurt-vignette {
   position: absolute;

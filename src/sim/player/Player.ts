@@ -36,6 +36,10 @@ export class Player {
   invuln = 0;
   /** Son zıplamanın zamanı (animasyon için). */
   airTime = 0;
+  /** Ses/efekt için olay sayaçları: zıplama, yere iniş (havada kalınmışsa), kayma başlangıcı. */
+  jumpSeq = 0;
+  landSeq = 0;
+  slideSeq = 0;
 
   private coyote = 0;
   private jumpBuffer = 0;
@@ -82,6 +86,7 @@ export class Player {
     // --- Kayma başlat / bitir ---
     if (input.slide && this.grounded && !this.sliding && this.slideCooldown <= 0 && (hasInput || speed > 1)) {
       this.sliding = true;
+      this.slideSeq++;
       let dx = speed > 0.5 ? this.vx / speed : ix;
       let dz = speed > 0.5 ? this.vz / speed : iz;
       if (hasInput && speed <= 0.5) {
@@ -130,6 +135,7 @@ export class Player {
         this.grounded = false;
         this.coyote = 0;
         this.jumpBuffer = 0;
+        this.jumpSeq++;
         if (this.sliding) this.endSlide();
       }
     }
@@ -167,7 +173,10 @@ export class Player {
     if (this.y <= ground) {
       this.y = ground;
       if (this.vy < 0) this.vy = 0;
-      if (!wasGrounded) this.jumpsLeft = jumpCount - 1;
+      if (!wasGrounded) {
+        this.jumpsLeft = jumpCount - 1;
+        if (this.airTime > 0.25) this.landSeq++;
+      }
       this.grounded = true;
     } else if (wasGrounded && this.vy <= 0 && this.y - ground < P.stepDown) {
       // Küçük inişlerde zemine yapış (her tümsekte havalanmasın).

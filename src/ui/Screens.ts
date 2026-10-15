@@ -36,6 +36,15 @@ export interface PactView {
   bane: string;
 }
 
+/** Duraklatma ekranındaki ses ayarları (AudioManager'a bağlanır). */
+export interface AudioControls {
+  sfx: number;
+  music: number;
+  muted: boolean;
+  setVolume(kind: 'sfx' | 'music', v: number): void;
+  toggleMute(): boolean;
+}
+
 export interface LevelUpActions {
   pick: (i: number) => void;
   banish: (i: number) => void;
@@ -263,16 +272,24 @@ export class Screens {
     );
   }
 
-  showPause(world: World, onResume: () => void, onRestart: () => void): void {
+  showPause(world: World, onResume: () => void, onRestart: () => void, audio?: AudioControls): void {
     const resume = h('button.btn.btn-primary', {}, 'DEVAM');
     resume.addEventListener('click', onResume);
     const guide = h('button.btn', { 'data-testid': 'guide' }, '📖 Rehber');
     guide.addEventListener('click', () =>
-      this.showGuide(world, () => this.showPause(world, onResume, onRestart)),
+      this.showGuide(world, () => this.showPause(world, onResume, onRestart, audio)),
     );
     const restart = h('button.btn', {}, 'Yeniden Başla');
     restart.addEventListener('click', onRestart);
-    this.show(h('div.panel', {}, h('h2', {}, 'Duraklatıldı'), h('div.buttons', {}, resume, guide, restart)));
+    this.show(
+      h(
+        'div.panel',
+        {},
+        h('h2', {}, 'Duraklatıldı'),
+        audio ? audioSettings(audio) : '',
+        h('div.buttons', {}, resume, guide, restart),
+      ),
+    );
   }
 
   /** Rehber: eşyalar (nadirliğe göre gruplu) ve evrimler; sahip olunanlar vurgulu. */
@@ -320,6 +337,33 @@ export class Screens {
     const badge = record?.isNew ? h('p.record-badge', { 'data-testid': 'record' }, '🏆 Yeni rekor!') : '';
     this.show(h('div.panel.gameover', {}, h('h2', {}, 'Öldün!'), badge, stats, again));
   }
+}
+
+/** Efekt ve müzik kaydırıcıları + sessiz düğmesi. */
+function audioSettings(a: AudioControls): HTMLElement {
+  const slider = (kind: 'sfx' | 'music', label: string, value: number) => {
+    const input = h('input', {
+      type: 'range',
+      min: '0',
+      max: '100',
+      value: String(Math.round(value * 100)),
+      'data-testid': `vol-${kind}`,
+      'aria-label': label,
+    });
+    input.addEventListener('input', () => a.setVolume(kind, Number(input.value) / 100));
+    return h('label.audio-row', {}, h('span', {}, label), input);
+  };
+  const mute = h('button.btn.btn-small', { 'data-testid': 'mute' }, a.muted ? '🔇 Sesi aç' : '🔊 Sessiz');
+  mute.addEventListener('click', () => {
+    mute.textContent = a.toggleMute() ? '🔇 Sesi aç' : '🔊 Sessiz';
+  });
+  return h(
+    'div.audio-settings',
+    {},
+    slider('sfx', '🔔 Efekt', a.sfx),
+    slider('music', '🎵 Müzik', a.music),
+    h('div.audio-mute', {}, mute, h('span.keys-only.note', {}, 'M tuşu')),
+  );
 }
 
 /** "⚔️ Silah 3/4 · 📖 Kitap 2/4": dolu yuvalar; dolunca yalnızca sahip olunanlar güçlenir. */
