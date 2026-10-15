@@ -15,6 +15,7 @@ import { describeUpgrade, slotUsage } from '../sim/progression/Upgrades';
 import { World } from '../sim/world/World';
 import type { RewardSounds } from '../ui/ChestReel';
 import { Hud } from '../ui/Hud';
+import { submitRun } from '../ui/records';
 import { Screens } from '../ui/Screens';
 import { TouchControls } from '../ui/TouchControls';
 import { type Flags, readFlags } from './flags';
@@ -384,10 +385,14 @@ export class Game {
       if (w.gameOver) {
         this.setState('gameover');
         this.input.exitLock();
-        this.screens.showGameOver(w, () => {
-          this.world = this.createWorld();
-          this.startRun();
-        });
+        this.screens.showGameOver(
+          w,
+          () => {
+            this.world = this.createWorld();
+            this.startRun();
+          },
+          submitRun(w),
+        );
       } else if (w.reward) {
         this.showReward();
       } else if (w.offer) {

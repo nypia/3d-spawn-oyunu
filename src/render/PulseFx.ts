@@ -10,7 +10,14 @@ import {
   RingGeometry,
   Vector3,
 } from 'three';
-import { PULSE_FREEZE, PULSE_HOLY, PULSE_MAGNET, PULSE_PHOENIX, type World } from '../sim/world/World';
+import {
+  PULSE_BLOOD,
+  PULSE_FREEZE,
+  PULSE_HOLY,
+  PULSE_MAGNET,
+  PULSE_PHOENIX,
+  type World,
+} from '../sim/world/World';
 
 const LIFE = 0.7;
 const CAP = 24;
@@ -19,6 +26,7 @@ const COLORS: Record<number, number> = {
   [PULSE_FREEZE]: 0x8fe6ff,
   [PULSE_HOLY]: 0xfff2b0,
   [PULSE_PHOENIX]: 0xff9a3d,
+  [PULSE_BLOOD]: 0xff2236,
 };
 /** HDR şiddet: bloom'da parlasın. */
 const INTENSITY = 2.2;

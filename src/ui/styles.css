@@ -169,6 +169,15 @@ body {
   animation: screen-flash 0.6s ease-out;
 }
 
+/* Kan Ayı: kenarlardan içeri kızıl, daha uzun flaş. */
+.screen-flash.blood {
+  background: radial-gradient(ellipse at center, rgb(255 40 50 / 35%), rgb(120 0 10 / 95%));
+}
+
+.screen-flash.blood.on {
+  animation-duration: 1.6s;
+}
+
 @keyframes screen-flash {
   from {
     opacity: 0.85;
@@ -228,7 +237,7 @@ body {
 }
 
 .hud-banner.show {
-  animation: banner-life 2.6s ease-out forwards;
+  animation: banner-life var(--life, 2.6s) ease-out forwards;
 }
 
 .banner-title {
@@ -297,10 +306,42 @@ body {
   font-size: 34px;
 }
 
+.hud-banner.blood {
+  color: #ffd6d6;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgb(90 0 10 / 92%) 15%,
+    rgb(90 0 10 / 92%) 85%,
+    transparent
+  );
+  border-color: rgb(255 40 60 / 80%);
+}
+
+.hud-banner.blood .banner-title {
+  font-size: 40px;
+  letter-spacing: 2px;
+  text-shadow:
+    0 0 18px rgb(255 30 50 / 90%),
+    var(--outline);
+}
+
+.hud-phase {
+  margin-top: -2px;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 800;
+  text-shadow: var(--outline);
+}
+
+.hud-phase.blood {
+  color: #ff9a9a;
+}
+
 /* Boss can barları: zamanlayıcının altında. */
 .boss-bars {
   position: absolute;
-  top: max(84px, calc(env(safe-area-inset-top) + 74px));
+  top: max(100px, calc(env(safe-area-inset-top) + 90px));
   left: 50%;
   display: flex;
   flex-direction: column;
@@ -1947,6 +1988,23 @@ body.touch .hp-text {
 
   .banner-title {
     font-size: 22px;
+  }
+
+  /* Dar ekranda ortada yer yok: faz satırı kill kutusunun altında, sağa yaslı. */
+  .hud-phase {
+    position: absolute;
+    top: calc(max(36px, env(safe-area-inset-top) + 26px) + 42px);
+    right: max(14px, env(safe-area-inset-right));
+    max-width: 45vw;
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.25;
+    text-align: right;
+  }
+
+  .boss-bars {
+    top: calc(max(36px, env(safe-area-inset-top) + 26px) + 84px);
+    width: 88vw;
   }
 
   .banner-sub {

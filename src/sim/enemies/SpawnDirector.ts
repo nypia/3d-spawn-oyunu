@@ -32,10 +32,14 @@ export class SpawnDirector {
 
   constructor(private readonly rng: Rng) {}
 
-  /** Çizelge zamanı: 1. döngüde gerçek zaman, Kan Ayı'nda 8:00'dan hızlı tekrar (en fazla 20:00). */
+  /**
+   * Çizelge zamanı: 1. döngüde gerçek zaman; Kan Ayı'nda sakinlik bitince 8:00'dan hızlı tekrar
+   * (en fazla 20:00).
+   */
   timelineTime(world: World): number {
     if (world.cycle <= 1) return Math.min(CYCLE.length, world.time);
-    return Math.min(CYCLE.length, CYCLE.timelineStart + (world.time - world.cycleStart) * CYCLE.pace);
+    const t = Math.max(0, world.time - world.cycleStart - CYCLE.calm);
+    return Math.min(CYCLE.length, CYCLE.timelineStart + t * CYCLE.pace);
   }
 
   creditRate(tl: number): number {
@@ -89,8 +93,8 @@ export class SpawnDirector {
       this.pending = this.rng.weightedIndex(this.weights);
     }
 
-    // Temalı olaylar.
-    while (this.eventCursor < WAVE_EVENTS.length && WAVE_EVENTS[this.eventCursor].at <= tl) {
+    // Temalı olaylar (sakinlikte beklerler).
+    while (calm && this.eventCursor < WAVE_EVENTS.length && WAVE_EVENTS[this.eventCursor].at <= tl) {
       const index = this.eventCursor++;
       const ev = WAVE_EVENTS[index];
       if (tl - ev.at > S.staleEvent) continue;
@@ -112,6 +116,16 @@ export class SpawnDirector {
     }
 
     this.recycleFarEnemies(world);
+  }
+
+  /** Kan Ayı: çizelge 8:00 karışımından yeniden başlar, kısa bir sakinlikten sonra. */
+  startCycle(world: World): void {
+    this.eventCursor = WAVE_EVENTS.findIndex((e) => e.at >= CYCLE.timelineStart);
+    if (this.eventCursor < 0) this.eventCursor = WAVE_EVENTS.length;
+    this.calmUntil = world.time + CYCLE.calm;
+    this.nextElite = world.time + 30;
+    this.credit = 0;
+    this.pending = -1;
   }
 
   /** Olay sayısı Kan Ayı'nda ve lanetle büyür. */

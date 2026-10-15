@@ -18,6 +18,11 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 /** Ufuk rengi: sis de bununla eşleşir, uzak tepeler gökyüzüne yumuşakça karışır. */
 export const HORIZON = new Color(0xbfe6ff);
 const ZENITH = new Color(0x3e8ff0);
+/** Kan Ayı gecesi: koyu bordo gök, kızıl ufuk. */
+export const BLOOD_HORIZON = new Color(0x6a1a26);
+const BLOOD_ZENITH = new Color(0x12040c);
+/** Kızıl dolunayın yönü (güneşin karşı tarafında, yüksekte). */
+const MOON_DIR = new Vector3(-0.45, 0.62, -0.64).normalize();
 
 const CLOUDS = 26;
 const m4 = new Matrix4();
@@ -63,9 +68,11 @@ export class Sky {
         depthWrite: false,
         fog: false,
         uniforms: {
-          uZenith: { value: ZENITH },
-          uHorizon: { value: HORIZON },
+          uZenith: { value: ZENITH.clone() },
+          uHorizon: { value: HORIZON.clone() },
           uSun: { value: sunDir.clone().normalize() },
+          uMoon: { value: MOON_DIR },
+          uBlood: { value: 0 },
         },
         vertexShader: /* glsl */ `
           varying vec3 vDir;
@@ -77,12 +84,20 @@ export class Sky {
           uniform vec3 uZenith;
           uniform vec3 uHorizon;
           uniform vec3 uSun;
+          uniform vec3 uMoon;
+          uniform float uBlood;
           varying vec3 vDir;
           void main() {
             float h = clamp(vDir.y, 0.0, 1.0);
             vec3 col = mix(uHorizon, uZenith, pow(h, 0.55));
             float sun = max(dot(vDir, uSun), 0.0);
-            col += vec3(1.0, 0.92, 0.7) * (pow(sun, 900.0) * 3.0 + pow(sun, 12.0) * 0.25);
+            col += vec3(1.0, 0.92, 0.7) * (pow(sun, 900.0) * 3.0 + pow(sun, 12.0) * 0.25) * (1.0 - uBlood);
+            // Kan Ayı: kızıl dolunay, çevresinde hale ve birkaç yıldız.
+            float moon = max(dot(vDir, uMoon), 0.0);
+            float disk = smoothstep(0.9985, 0.9991, moon);
+            col += (vec3(1.6, 0.18, 0.12) * disk + vec3(0.9, 0.08, 0.06) * pow(moon, 60.0) * 0.6) * uBlood;
+            float star = step(0.9965, fract(sin(dot(floor(vDir * 180.0), vec3(12.9898, 78.233, 37.719))) * 43758.5453));
+            col += vec3(0.9, 0.7, 0.75) * star * h * uBlood * 0.8;
             gl_FragColor = vec4(col, 1.0);
             #include <tonemapping_fragment>
             #include <colorspace_fragment>
@@ -110,6 +125,18 @@ export class Sky {
       });
     }
     this.root.add(this.dome, this.clouds);
+  }
+
+  /** Gündüz (0) → Kan Ayı gecesi (1). */
+  setBlood(b: number): void {
+    const u = (this.dome.material as ShaderMaterial).uniforms;
+    if (u.uBlood.value === b) return;
+    u.uBlood.value = b;
+    (u.uZenith.value as Color).copy(ZENITH).lerp(BLOOD_ZENITH, b);
+    (u.uHorizon.value as Color).copy(HORIZON).lerp(BLOOD_HORIZON, b);
+    const m = this.clouds.material as MeshLambertMaterial;
+    m.color.setRGB(1, 1, 1).lerp(new Color(0x5a2a36), b);
+    m.emissive.setHex(0x9ab4cc).lerp(new Color(0x3a0a14), b);
   }
 
   update(camera: Vector3, time: number): void {

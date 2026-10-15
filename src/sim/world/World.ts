@@ -56,6 +56,7 @@ import {
   updateWeapon,
   type WeaponInstance,
 } from '../weapons/Weapons';
+import { ANN_BLOOD_MOON } from './announce';
 import { EventRing } from './EventRing';
 import { ALTAR as ALTAR_KIND, CAULDRON as CAULDRON_KIND, CHEST, Interactables, VASE } from './Interactables';
 import { Landmarks } from './Landmarks';
@@ -128,6 +129,9 @@ export const PULSE_MAGNET = 0;
 export const PULSE_FREEZE = 1;
 export const PULSE_HOLY = 2;
 export const PULSE_PHOENIX = 3;
+export const PULSE_BLOOD = 4;
+/** Kan Ayı doğunca bu yarıçaptaki sıradan düşmanlar silinir. */
+const BLOOD_MOON_PURGE = 45;
 /** collectFx türü: XP taşı (pickup'lar 1 + PICKUP_* olarak yazılır). */
 export const COLLECT_GEM = 0;
 
@@ -198,6 +202,8 @@ export class World {
   /** Kan Ayı döngüsü (1 = ilk gün) ve başladığı an. */
   cycle = 1;
   cycleStart = 0;
+  /** Son Kan Ayı'nın doğduğu an (render geçişi; −1 = henüz yok). */
+  bloodMoonAt = -1;
   readonly mods: WorldMods = { enemyHp: 1, enemyDamage: 1, enemySpeed: 1, damageTaken: 1, healing: 1 };
   /** Isabet sorgularına eklenen pay: en büyük düşman yarıçapı (büyük gövdeler ızgarada kaçmasın). */
   hitPad = 0.8;
@@ -549,6 +555,34 @@ export class World {
     const e = this.enemies;
     // Boss'lar donmaz.
     if (!e.dead[i] && !(e.flags[i] & EF_BOSS)) e.frozen[i] = Math.max(e.frozen[i], seconds);
+  }
+
+  /**
+   * Final boss yenildi: dünya olduğu yerde kızıl geceye döner. Yeni döngü daha zor başlar (çizelge
+   * 8:00'dan hızlı tekrar, daha güçlü düşmanlar, "Kanlı" boss'lar); oyun oyuncu ölene kadar sürer.
+   */
+  startBloodMoon(): void {
+    this.cycle++;
+    this.cycleStart = this.time;
+    this.bloodMoonAt = this.time;
+    const p = this.player;
+    const e = this.enemies;
+    const r2 = BLOOD_MOON_PURGE ** 2;
+    let shown = 0;
+    for (let i = 0; i < e.count; i++) {
+      if (e.dead[i] || e.flags[i] & (EF_BOSS | EF_SPECIAL)) continue;
+      if ((e.x[i] - p.x) ** 2 + (e.z[i] - p.z) ** 2 > r2) continue;
+      e.dead[i] = 1;
+      if (shown++ < 40) this.deathFx.push(e.x[i], e.y[i] + e.hover[i], e.z[i], e.type[i], 0, e.scale[i]);
+    }
+    p.hp = Math.min(p.maxHp, p.hp + p.maxHp * 0.5);
+    this.landmarks.rearm(this);
+    this.director.startCycle(this);
+    this.bosses.resetCycle();
+    this.hazards.clear();
+    this.pulseFx.push(p.x, p.y, p.z, BLOOD_MOON_PURGE, PULSE_BLOOD);
+    this.announceFx.push(ANN_BLOOD_MOON, this.cycle, 0);
+    this.shake(0.8);
   }
 
   /** Render'dan kamera sarsıntısı iste. */
@@ -1080,7 +1114,7 @@ export class World {
       // Patlamayı kuyruğa al (zincirleme patlamalar özyineleme yapmasın).
       this.addBlast(x, z, ITEM_FX.skullRadius, ITEM_FX.skullDamage, 3, 0.05);
     }
-    if (e.flags[i] & EF_BOSS) this.bosses.onDeath(this, i);
+    if (e.flags[i] & EF_BOSS && this.bosses.onDeath(this, i)?.final) this.startBloodMoon();
     this.deathFx.push(x, e.y[i] + e.hover[i], z, e.type[i], yaw, e.scale[i]);
   }
 

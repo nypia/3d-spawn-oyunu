@@ -95,10 +95,14 @@ mat4 crowdBone(float row) {
 }
 `;
 
+/** Tüm kalabalıkların ortak uniform'u: Kan Ayı'nda düşmanların kızıl kenar parıltısı (0..1). */
+export const CROWD_BLOOD = { value: 0 };
+
 /** Lambert (ya da benzeri) materyale kalabalık animasyonunu ve parıltı/flaşı ekler. */
 export function patchCrowdMaterial<M extends Material>(mat: M, bones: DataTexture): M {
   mat.onBeforeCompile = (shader: WebGLProgramParametersWithUniforms) => {
     shader.uniforms.crowdBones = { value: bones };
+    shader.uniforms.crowdBlood = CROWD_BLOOD;
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>\n${VERTEX_PARS}`)
       .replace(
@@ -113,16 +117,16 @@ export function patchCrowdMaterial<M extends Material>(mat: M, bones: DataTextur
     shader.fragmentShader = shader.fragmentShader
       .replace(
         '#include <common>',
-        '#include <common>\nvarying float vCrowdFlash;\nvarying float vCrowdGlow;',
+        '#include <common>\nvarying float vCrowdFlash;\nvarying float vCrowdGlow;\nuniform float crowdBlood;',
       )
       .replace(
         '#include <emissivemap_fragment>',
         // flaş > 0: vuruş (beyaz), < 0: donma (buz mavisi).
-        '#include <emissivemap_fragment>\ntotalEmissiveRadiance += diffuseColor.rgb * vCrowdGlow * 1.3 + (vCrowdFlash > 0.0 ? vec3(vCrowdFlash) : vec3(0.04, 0.16, 0.38) * -vCrowdFlash);',
+        '#include <emissivemap_fragment>\ntotalEmissiveRadiance += diffuseColor.rgb * vCrowdGlow * 1.3 + (vCrowdFlash > 0.0 ? vec3(vCrowdFlash) : vec3(0.04, 0.16, 0.38) * -vCrowdFlash);\n// Kan Ayı: kenarlarda kızıl parıltı.\ntotalEmissiveRadiance += vec3(0.6, 0.03, 0.02) * crowdBlood * pow(1.0 - abs(normal.z), 3.0);',
       );
   };
   // Aynı onBeforeCompile kodu farklı dokularla kullanılıyor: program önbelleği için sabit anahtar yeter
   // (doku bir uniform, programın parçası değil).
-  mat.customProgramCacheKey = () => 'crowd-v1';
+  mat.customProgramCacheKey = () => 'crowd-v2';
   return mat;
 }

@@ -1,4 +1,5 @@
 import {
+  Color,
   DirectionalLight,
   Fog,
   HalfFloatType,
@@ -21,6 +22,7 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 import type { World } from '../sim/world/World';
 import type { GameAssets } from './assets/loadAssets';
 import { CameraRig } from './CameraRig';
+import { CROWD_BLOOD } from './crowd/CrowdMesh';
 import { DamageNumbers } from './DamageNumbers';
 import { Effects } from './fx/Effects';
 import { HazardView } from './HazardView';
@@ -29,11 +31,14 @@ import { PropsView } from './PropsView';
 import { PulseFx } from './PulseFx';
 import type { QualitySettings } from './Quality';
 import { Scatter } from './Scatter';
-import { HORIZON, Sky } from './Sky';
+import { BLOOD_HORIZON, HORIZON, Sky } from './Sky';
 import { WeaponFx } from './WeaponFx';
 import { WorldView } from './WorldView';
 
 /** Güneşin geldiği yön (gölge kamerası ve gökyüzündeki parıltı aynı yönü kullanır). */
+const BLOOD_SKY = new Color(0xb07890);
+const BLOOD_GROUND = new Color(0x3a1420);
+const BLOOD_SUN = new Color(0xffa898);
 const SUN_DIR = new Vector3(25, 45, 15).normalize();
 
 /** Three.js sahnesi: ışıklar, sis, kamera ve görünüm sınıflarının sahibi. */
@@ -43,6 +48,10 @@ export class Renderer3D {
   readonly camera: PerspectiveCamera;
   readonly rig: CameraRig;
   private readonly sun: DirectionalLight;
+  private readonly hemi: HemisphereLight;
+  private readonly fogColor = HORIZON.clone();
+  /** Gündüz (0) → Kan Ayı gecesi (1) geçişi. */
+  private blood = -1;
   private readonly hero: HeroView;
   private readonly worldView: WorldView;
   private readonly hazardView = new HazardView();
@@ -88,12 +97,12 @@ export class Renderer3D {
     this.camera = new PerspectiveCamera(60, 1, 0.1, 400);
     this.rig = new CameraRig(this.camera);
 
-    this.scene.background = HORIZON;
-    this.scene.fog = new Fog(HORIZON, 55, 165);
+    this.scene.background = this.fogColor;
+    this.scene.fog = new Fog(this.fogColor, 55, 165);
 
     // Soğuk gök ışığı + sıcak güneş: gölgeler mavimsi, aydınlık yüzler sıcak kalır.
-    const hemi = new HemisphereLight(0xcfe6ff, 0x5b7a3c, 1.35);
-    this.scene.add(hemi);
+    this.hemi = new HemisphereLight(0xcfe6ff, 0x5b7a3c, 1.35);
+    this.scene.add(this.hemi);
     this.sun = new DirectionalLight(0xffe9c4, 2.7);
     this.sun.castShadow = quality.shadows;
     this.sun.shadow.mapSize.set(quality.shadowMapSize, quality.shadowMapSize);
@@ -236,6 +245,26 @@ export class Renderer3D {
     this.camera.setViewOffset(w, h, portrait ? 0 : -w * 0.17 * menu, portrait ? h * 0.2 * menu : 0, w, h);
   }
 
+  /** Kan Ayı: gök, sis ve ışıklar kızıl geceye döner, düşmanlara kızıl kenar parıltısı. */
+  private setBlood(b: number): void {
+    const s = b * b * (3 - 2 * b);
+    if (s === this.blood) return;
+    this.blood = s;
+    this.sky.setBlood(s);
+    this.fogColor.copy(HORIZON).lerp(BLOOD_HORIZON, s);
+    const fog = this.scene.fog as Fog;
+    // Fog rengi kopyalar: aynı nesne değil, ayrıca güncellenmeli.
+    fog.color.copy(this.fogColor);
+    fog.near = 55 - 15 * s;
+    fog.far = 165 - 35 * s;
+    this.hemi.color.setHex(0xcfe6ff).lerp(BLOOD_SKY, s);
+    this.hemi.groundColor.setHex(0x5b7a3c).lerp(BLOOD_GROUND, s);
+    this.hemi.intensity = 1.35 - 0.3 * s;
+    this.sun.color.setHex(0xffe9c4).lerp(BLOOD_SUN, s);
+    this.sun.intensity = 2.7 - 1.0 * s;
+    CROWD_BLOOD.value = s;
+  }
+
   render(world: World, dt: number, cinematic: boolean): void {
     this.time += dt;
     if (!cinematic) this.adapt(dt);
@@ -243,6 +272,8 @@ export class Renderer3D {
     if (cinematic) this.rig.orbit(p, world.terrain, dt);
     else this.rig.update(p, world.terrain, dt);
     this.menuFraming();
+
+    this.setBlood(world.cycle > 1 ? Math.min(1, (world.time - world.bloodMoonAt) / 4) : 0);
 
     // Güneş (ve gölge kamerası) oyuncuyu takip eder.
     this.sun.position.set(p.x + SUN_DIR.x * 55, p.y + SUN_DIR.y * 55, p.z + SUN_DIR.z * 55);

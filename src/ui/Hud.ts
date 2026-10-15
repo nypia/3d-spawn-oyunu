@@ -7,6 +7,7 @@ import { TOMES } from '../data/tomes';
 import { WAVE_EVENTS } from '../data/waves';
 import { EF_SPECIAL } from '../sim/enemies/EnemyPool';
 import {
+  ANN_BLOOD_MOON,
   ANN_BOSS_DEAD,
   ANN_BOSS_SPAWN,
   ANN_BOSS_WARN,
@@ -29,6 +30,8 @@ export class Hud {
   private readonly xpFill = h('div.xp-fill');
   private readonly level = h('span.xp-level');
   private readonly timer = h('div.hud-timer');
+  /** "☀️ Gün · 👑 Balçık Kral 1:20" ya da "🌕 Kan Ayı 2 · …" */
+  private readonly phase = h('div.hud-phase', { 'data-testid': 'phase' });
   private readonly kills = h('span.hud-kill-count');
   private readonly gold = h('span.hud-gold-count', { 'data-testid': 'gold' });
   private readonly hpFill = h('div.hp-fill');
@@ -63,7 +66,7 @@ export class Hud {
   private lastBossKey = '';
   private annCursor = 0;
   private lastLoadoutKey = '';
-  private lastText = { level: '', timer: '', kills: '', gold: '', hp: '', hint: '', toast: '' };
+  private lastText = { level: '', timer: '', kills: '', gold: '', hp: '', hint: '', toast: '', phase: '' };
 
   constructor(parent: HTMLElement) {
     this.el = h(
@@ -74,6 +77,7 @@ export class Hud {
       this.flash,
       h('div.xp-bar', {}, this.xpFill, this.level),
       this.timer,
+      this.phase,
       h('div.hud-kills', {}, h('span', {}, '💀 '), this.kills, h('span.hud-gold', {}, '🪙 ', this.gold)),
       this.loadout,
       this.hint,
@@ -103,6 +107,8 @@ export class Hud {
     this.hpFill.style.transform = `scaleX(${Math.max(0, p.hp / p.maxHp)})`;
     this.setText('level', this.level, `Sv. ${world.level}`);
     this.setText('timer', this.timer, formatTime(world.time));
+    this.setText('phase', this.phase, phaseText(world));
+    this.phase.classList.toggle('blood', world.cycle > 1);
     this.setText('kills', this.kills, String(world.kills));
     this.setText('gold', this.gold, String(Math.floor(world.gold)));
     this.setText('hp', this.hpText, `${Math.ceil(p.hp)} / ${Math.round(p.maxHp)}`);
@@ -201,7 +207,15 @@ export class Hud {
     }
     this.annCursor = world.announceFx.drain(this.annCursor, (d, o) => {
       const a = announcement(d[o], d[o + 1], d[o + 2], world.cycle);
-      if (a) this.bannerQueue.push(a);
+      if (!a) return;
+      // Kan Ayı sırayı beklemez: kızıl flaşla hemen gelir.
+      if (d[o] === ANN_BLOOD_MOON) {
+        this.bannerQueue.unshift(a);
+        this.bannerUntil = 0;
+        this.flash.classList.remove('on', 'blood');
+        void this.flash.offsetWidth;
+        this.flash.classList.add('on', 'blood');
+      } else this.bannerQueue.push(a);
     });
     const now = performance.now();
     if (now < this.bannerUntil) return;
@@ -213,6 +227,7 @@ export class Hud {
     this.bannerTitle.textContent = next.title;
     this.bannerSub.textContent = next.sub;
     this.banner.className = `hud-banner ${next.style}`;
+    this.banner.style.setProperty('--life', `${next.ms / 1000}s`);
     this.banner.style.display = '';
     // Animasyonu yeniden başlat.
     void this.banner.offsetWidth;
@@ -285,9 +300,30 @@ const EVENT_VERB = {
   horde: 'duvar gibi yürüyor!',
 };
 
+/** Zamanlayıcının altındaki satır: gün / Kan Ayı ve sıradaki boss'a kalan süre. */
+function phaseText(world: World): string {
+  const phase = world.cycle > 1 ? `🌕 Kan Ayı ${world.cycle}` : '☀️ Gün';
+  const b = world.bosses;
+  const def = BOSSES[b.next];
+  if (!def || b.active.length > 0) return phase;
+  const left = b.dueAt(world) - world.time;
+  if (left <= 0 || left > 600) return phase;
+  const name = world.cycle > 1 ? `Kanlı ${def.name}` : def.name;
+  return `${phase} · 👑 ${name} ${formatTime(left)}`;
+}
+
 function announcement(kind: number, value: number, extra: number, cycle: number): Announcement | null {
+  if (kind === ANN_BLOOD_MOON)
+    return {
+      title: '🌕 KAN AYI DOĞDU',
+      sub: `Döngü ${value} · düşmanlar güçlendi, boss'lar kanlı döndü`,
+      style: 'blood',
+      ms: 3800,
+    };
   const boss = BOSSES[value];
-  const bossName = boss ? (cycle > 1 ? `Kanlı ${boss.name}` : boss.name) : '';
+  // Boss duyurusu olayın olduğu döngüyü taşır (final boss ölünce döngü çoktan ilerlemiştir).
+  const bossCycle = extra || cycle;
+  const bossName = boss ? (bossCycle > 1 ? `Kanlı ${boss.name}` : boss.name) : '';
   if (kind === ANN_BOSS_WARN && boss) {
     const sub = boss.final ? 'Final boss · 10 saniye' : '10 saniye içinde geliyor';
     return { title: `⚠ ${bossName} yaklaşıyor!`, sub, style: 'boss', ms: 3000 };

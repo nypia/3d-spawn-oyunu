@@ -9,6 +9,7 @@ import type { SlotUsage, UpgradeView } from '../sim/progression/Upgrades';
 import type { World } from '../sim/world/World';
 import { ChestReel, type ChestView, type RewardSounds } from './ChestReel';
 import { formatTime, h } from './dom';
+import type { RunRecord } from './records';
 import { revealBurst } from './rewardFx';
 
 export interface EvolutionView {
@@ -300,20 +301,24 @@ export class Screens {
     );
   }
 
-  showGameOver(world: World, onRestart: () => void): void {
+  showGameOver(world: World, onRestart: () => void, record?: { best: RunRecord; isNew: boolean }): void {
     const again = h('button.btn.btn-primary', { 'data-testid': 'restart' }, 'TEKRAR OYNA');
     again.addEventListener('click', onRestart);
-    const stats = h(
-      'dl.stats',
-      {},
-      ...[
-        ['Süre', formatTime(world.time)],
-        ['Seviye', String(world.level)],
-        ['Öldürülen', String(world.kills)],
-        ['Toplam hasar', Math.round(world.damageDealt).toLocaleString('tr-TR')],
-      ].flatMap(([k, v]) => [h('dt', {}, k), h('dd', {}, v)]),
-    );
-    this.show(h('div.panel.gameover', {}, h('h2', {}, 'Öldün!'), stats, again));
+    const rows: [string, string][] = [
+      ['Süre', formatTime(world.time)],
+      ['Ulaşılan', world.cycle > 1 ? `🌕 Kan Ayı ${world.cycle}` : '☀️ Gün 1'],
+      ['Boss', String(world.bosses.killed)],
+      ['Seviye', String(world.level)],
+      ['Öldürülen', String(world.kills)],
+      ['Toplam hasar', Math.round(world.damageDealt).toLocaleString('tr-TR')],
+    ];
+    if (record && !record.isNew) {
+      const b = record.best;
+      rows.push(['En iyi', `${formatTime(b.time)}${b.cycle > 1 ? ` · Kan Ayı ${b.cycle}` : ''}`]);
+    }
+    const stats = h('dl.stats', {}, ...rows.flatMap(([k, v]) => [h('dt', {}, k), h('dd', {}, v)]));
+    const badge = record?.isNew ? h('p.record-badge', { 'data-testid': 'record' }, '🏆 Yeni rekor!') : '';
+    this.show(h('div.panel.gameover', {}, h('h2', {}, 'Öldün!'), badge, stats, again));
   }
 }
 

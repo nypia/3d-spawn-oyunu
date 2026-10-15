@@ -70,7 +70,7 @@ export class BossController {
     }
     if (!this.warned && world.time >= due - BOSS.warn) {
       this.warned = true;
-      world.announceFx.push(ANN_BOSS_WARN, this.next, 0);
+      world.announceFx.push(ANN_BOSS_WARN, this.next, world.cycle);
     }
     if (world.time >= due && this.spawn(world, this.next)) {
       this.next++;
@@ -107,7 +107,7 @@ export class BossController {
       sz: 0,
     });
     this.lastSpawnAt = world.time;
-    world.announceFx.push(ANN_BOSS_SPAWN, index, 0);
+    world.announceFx.push(ANN_BOSS_SPAWN, index, world.cycle);
     world.shake(0.6);
     return true;
   }
@@ -443,7 +443,7 @@ export class BossController {
         });
       }
     }
-    world.announceFx.push(ANN_BOSS_DEAD, b.index, 0);
+    world.announceFx.push(ANN_BOSS_DEAD, b.index, world.cycle);
     world.shake(0.5);
     return b.def;
   }
