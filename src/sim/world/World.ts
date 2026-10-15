@@ -1,5 +1,6 @@
 import { Rng } from '../../core/Rng';
 import { BALANCE, xpToNext } from '../../data/balance';
+import { CHEST_BOSS, CHEST_ELITE, CHEST_PLAIN, CHEST_TIERS } from '../../data/chests';
 import {
   type DashParams,
   ELITE,
@@ -62,8 +63,15 @@ export interface ShrineOption {
   value: number;
 }
 
+/** Sandıktan çıkan bir eşya. */
+export interface ItemDrop {
+  item: number;
+  rarity: Rarity;
+}
+
 export type Reward =
-  | { kind: 'item'; item: number; rarity: Rarity }
+  /** Sandık: `source` = sandık türü (CHEST_*), her eşya ayrı çarkta döner. */
+  | { kind: 'item'; source: number; items: ItemDrop[] }
   | { kind: 'shrine'; options: ShrineOption[] }
   /** Sandıktan evrim: `slot` = weapons dizisindeki silah. */
   | { kind: 'evolution'; slot: number };
@@ -150,8 +158,8 @@ export class World {
   readonly beamFx = new EventRing(128, 6);
   /** Patlama: x,y,z,yarıçap */
   readonly blastFx = new EventRing(64, 4);
-  /** Kırılma/açılma: x,y,z,tür (Interactables türü) */
-  readonly breakFx = new EventRing(32, 4);
+  /** Kırılma/açılma: x,y,z,tür (Interactables türü),nadirlik (sandıkta en yüksek) */
+  readonly breakFx = new EventRing(32, 5);
   /** Yayılan halka (mıknatıs, donma, kutsal, diriliş): x,y,z,yarıçap,tür (PULSE_*) */
   readonly pulseFx = new EventRing(16, 5);
   /** Toplama (ışıltı): x,y,z,tür (COLLECT_GEM ya da 1+PICKUP_*),değer */
@@ -187,6 +195,8 @@ export class World {
   chestsOpened = 0;
   /** Sandık/tapınak ödülü: doluysa oyun durur, oyuncu alır. */
   reward: Reward | null = null;
+  /** Sıradaki ödüller (ör. boss sandığında önce evrim, sonra eşyalar). */
+  readonly rewardQueue: Reward[] = [];
   /** Kalkan Muskası bekleme süresi. */
   shieldCooldown = 0;
   /** Mıknatıs Taşı'nın bir sonraki çekişine kalan süre. */
@@ -369,11 +379,17 @@ export class World {
     }
   }
 
-  /** Ödülü al: sandık eşyası ya da tapınak bonusu (choice = seçilen seçenek). */
+  /** Ödül ver: başka bir ödül açıksa sıraya girer. */
+  pushReward(r: Reward): void {
+    if (this.reward) this.rewardQueue.push(r);
+    else this.reward = r;
+  }
+
+  /** Ödülü al: sandık eşyaları ya da tapınak bonusu (choice = seçilen seçenek). */
   takeReward(choice = 0): void {
     const r = this.reward;
     if (!r) return;
-    if (r.kind === 'item') this.applyItem(r.item);
+    if (r.kind === 'item') for (const d of r.items) this.applyItem(d.item);
     else if (r.kind === 'evolution') this.evolveWeapon(r.slot);
     else {
       const o = r.options[Math.min(choice, r.options.length - 1)];
@@ -385,7 +401,7 @@ export class World {
         this.player.hp = Math.min(this.player.maxHp, this.player.hp + o.value);
       }
     }
-    this.reward = null;
+    this.reward = this.rewardQueue.shift() ?? null;
   }
 
   /** Silah evrime hazır mı: maks seviye, henüz evrimleşmemiş ve eşleşen kitap en az Sv.1. */
@@ -442,14 +458,52 @@ export class World {
     this.player.maxHp = this.stats.get('maxHp');
   }
 
-  /** Nadirlik zarına göre eşya seçer; o kademede eşya yoksa bir alt kademeye iner. */
-  rollItem(): { item: number; rarity: Rarity } {
-    let rarity = rollRarity(this.rng, this.stats.get('luck'));
+  /**
+   * Nadirlik zarına göre eşya seçer (en az `minRarity`); o kademede eşya yoksa bir alt kademeye iner.
+   * `exclude`: tercihen tekrar çıkmasın istenen eşyalar (çok eşyalı sandık).
+   */
+  rollItem(luckBonus = 0, minRarity: Rarity = 0, exclude?: readonly number[]): ItemDrop {
+    let rarity = Math.max(minRarity, rollRarity(this.rng, this.stats.get('luck') + luckBonus)) as Rarity;
     for (;;) {
-      const pool = ITEMS.map((d, i) => (d.rarity === rarity ? i : -1)).filter((i) => i >= 0);
+      const all = ITEMS.map((d, i) => (d.rarity === rarity ? i : -1)).filter((i) => i >= 0);
+      const fresh = exclude ? all.filter((i) => !exclude.includes(i)) : all;
+      const pool = fresh.length > 0 ? fresh : all;
       if (pool.length > 0 || rarity === 0) return { item: this.rng.pick(pool), rarity };
       rarity = (rarity - 1) as Rarity;
     }
+  }
+
+  /** n farklı eşya (mümkünse). */
+  rollItems(n: number, luckBonus = 0, minRarity: Rarity = 0): ItemDrop[] {
+    const out: ItemDrop[] = [];
+    for (let k = 0; k < n; k++) {
+      out.push(
+        this.rollItem(
+          luckBonus,
+          minRarity,
+          out.map((d) => d.item),
+        ),
+      );
+    }
+    return out;
+  }
+
+  /**
+   * Sandık açılır: evrime hazır silah varsa önce evrim; boss sandığı yine de eşyalarını verir.
+   * Render'a en yüksek nadirlik gider (patlamanın büyüklüğü/rengi).
+   */
+  openChest(tier: number, x: number, y: number, z: number, minRarity?: Rarity): void {
+    const t = CHEST_TIERS[tier] ?? CHEST_TIERS[CHEST_PLAIN];
+    this.chestsOpened++;
+    const slot = this.findEvolution();
+    let best = 3;
+    if (slot >= 0) this.pushReward({ kind: 'evolution', slot });
+    if (slot < 0 || tier === CHEST_BOSS) {
+      const items = this.rollItems(t.items, t.luck, minRarity ?? t.minRarity);
+      best = Math.max(slot >= 0 ? 3 : 0, ...items.map((d) => d.rarity));
+      this.pushReward({ kind: 'item', source: tier, items });
+    }
+    this.breakFx.push(x, y, z, CHEST, best);
   }
 
   /** Mıknatıs Taşı: belirli aralıklarla yakındaki XP ve altını çeker. */
@@ -623,7 +677,7 @@ export class World {
       const level = Math.abs(p.y - y) <= 2;
       if (it.kind[i] === VASE && level && d2 < L.vaseRadius * L.vaseRadius) {
         it.used[i] = 1;
-        this.breakFx.push(it.x[i], y, it.z[i], VASE);
+        this.breakFx.push(it.x[i], y, it.z[i], VASE, 0);
         const coins = this.rng.int(L.vaseGoldMin, L.vaseGoldMax);
         for (let c = 0; c < coins; c++) this.dropPickup(PICKUP_GOLD, it.x[i], y + 0.35, it.z[i], 1);
         if (this.rng.chance(L.vaseHealChance)) this.dropPickup(PICKUP_HEAL, it.x[i], y + 0.4, it.z[i], 1);
@@ -636,14 +690,7 @@ export class World {
           this.chestPrice = Math.round(this.chestPrice * L.chestPriceGrowth);
         }
         it.used[i] = 1;
-        this.chestsOpened++;
-        this.breakFx.push(it.x[i], y, it.z[i], CHEST);
-        const slot = this.findEvolution();
-        if (slot >= 0) this.reward = { kind: 'evolution', slot };
-        else {
-          const { item, rarity } = this.rollItem();
-          this.reward = { kind: 'item', item, rarity };
-        }
+        this.openChest(free ? it.tier[i] : CHEST_PLAIN, it.x[i], y, it.z[i]);
       } else if (it.kind[i] === SHRINE_KIND) {
         // İçinde durdukça dolar, çıkınca yavaşça boşalır.
         if (level && d2 < SHRINE.radius * SHRINE.radius) {
@@ -651,8 +698,8 @@ export class World {
           if (it.charge[i] >= 1 && !this.reward) {
             it.charge[i] = 1;
             it.used[i] = 1;
-            this.breakFx.push(it.x[i], y, it.z[i], SHRINE_KIND);
-            this.reward = { kind: 'shrine', options: this.rollShrineOptions() };
+            this.breakFx.push(it.x[i], y, it.z[i], SHRINE_KIND, 0);
+            this.pushReward({ kind: 'shrine', options: this.rollShrineOptions() });
           }
         } else if (it.charge[i] > 0) {
           it.charge[i] = Math.max(0, it.charge[i] - (dt * SHRINE.decayRate) / SHRINE.chargeTime);
@@ -979,7 +1026,7 @@ export class World {
     if (e.elite[i]) {
       // Elit: ücretsiz ödül sandığı + biraz altın.
       this.eliteKills++;
-      this.interactables.add(CHEST, x, z, this.rng.range(0, Math.PI * 2), true);
+      this.interactables.addRewardChest(x, z, this.rng.range(0, Math.PI * 2), CHEST_ELITE);
       for (let c = 0; c < 3; c++) this.dropPickup(PICKUP_GOLD, x, gy, z, 2);
       if (this.rng.chance(BALANCE.loot.eliteMagnetChance)) this.dropPickup(PICKUP_MAGNET, x, gy + 0.1, z, 1);
     } else if (this.rng.chance(BALANCE.loot.goldDropChance)) {

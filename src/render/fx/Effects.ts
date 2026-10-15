@@ -36,6 +36,9 @@ const DEATH: Record<string, { colors: [number, number]; n: number; size: number;
   keeper: { colors: [0x9a5b2e, 0x3f8f5a], n: 7, size: 0.22, spark: 0xc06bff },
 };
 
+/** Sandık patlaması: Sıradan, Nadir, Epik, Efsanevi. */
+const CHEST_RARITY_COLOR = [0xffd34a, 0x4fb3ff, 0xc77dff, 0xffb627];
+
 /** Toplanan pickup → ışıltı rengi. */
 const PICKUP_SPARK: Record<number, number> = {
   [PICKUP_GOLD]: 0xffd34a,
@@ -331,7 +334,10 @@ export class Effects {
         this.shards(x, y + 0.6, z, 9, [0xc8743f, 0xa65a2e, 0xe0a070], 0.22);
         this.puff(x, y + 0.3, z, 4, 0xd9c8a8, 0.5, 0.5, 0.7, 1.8, 0.9);
       } else if (kind === CHEST) {
-        for (let k = 0; k < 14; k++) {
+        // Patlama sandıktan çıkan en iyi eşyanın nadirliğiyle büyür ve renklenir.
+        const rarity = d[o + 4];
+        const color = CHEST_RARITY_COLOR[rarity] ?? 0xffd34a;
+        for (let k = 0; k < 14 + rarity * 6; k++) {
           const a = Math.random() * Math.PI * 2;
           const s = rnd(1.5, 4);
           this.coins.emit(
@@ -347,8 +353,36 @@ export class Effects {
             rnd(8, 16),
           );
         }
-        this.stars(x, y + 1, z, 18, 0xffd34a, 2.8, 3, 4, 0.5, 0.9);
-        this.flash(x, y + 1, z, 3, 0xffe08a, 3, 0.25);
+        this.stars(
+          x,
+          y + 1,
+          z,
+          18 + rarity * 14,
+          color,
+          2.8,
+          3 + rarity,
+          4 + rarity,
+          0.5,
+          0.9 + rarity * 0.2,
+        );
+        this.flash(x, y + 1, z, 3 + rarity * 1.5, color, 3, 0.25 + rarity * 0.08);
+        if (rarity >= 2) {
+          // Epik/efsanevi: gökyüzüne yükselen ışık sütunu.
+          for (let k = 0; k < 10 * rarity; k++) {
+            this.stars(
+              x + rnd(-0.4, 0.4),
+              y + rnd(0.5, 1.5),
+              z + rnd(-0.4, 0.4),
+              1,
+              color,
+              3.5,
+              0.3,
+              9,
+              0.6,
+              1.4,
+            );
+          }
+        }
       } else if (kind === SHRINE) {
         for (let k = 0; k < 40; k++) {
           const a = Math.random() * Math.PI * 2;

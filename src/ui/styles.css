@@ -416,7 +416,7 @@ body.touch .hud-hint {
   place-items: center;
   padding: 16px;
   background: radial-gradient(ellipse at center, rgb(10 12 30 / 35%), rgb(10 12 30 / 78%));
-  overflow-y: auto;
+  overflow: hidden auto;
 }
 
 .panel {
@@ -979,6 +979,582 @@ kbd {
   from {
     opacity: 0;
     transform: translateY(12px) scale(0.96);
+  }
+}
+
+/* ---------------------------------------------------------------- Sandık çarkı */
+
+.panel.chest {
+  width: min(440px, 100%);
+}
+
+.chest-stage,
+.evo-stage {
+  position: relative;
+  isolation: isolate;
+}
+
+.chest-stage {
+  display: grid;
+  place-items: center;
+  height: 118px;
+  margin: 2px 0 8px;
+}
+
+.chest-art {
+  position: relative;
+  z-index: 1;
+  width: 112px;
+  height: 86px;
+}
+
+.chest-body {
+  position: absolute;
+  inset: auto 0 0;
+  height: 56px;
+  border: 3px solid #3d1f0a;
+  border-radius: 6px 6px 12px 12px;
+  background:
+    linear-gradient(
+      90deg,
+      transparent 14%,
+      #e8b04a 14% 22%,
+      transparent 22% 78%,
+      #e8b04a 78% 86%,
+      transparent 86%
+    ),
+    linear-gradient(180deg, #a2602c, #6a3815);
+  box-shadow: 0 6px 0 rgb(0 0 0 / 30%);
+}
+
+.chest-lid {
+  position: absolute;
+  inset: 2px -3px auto;
+  height: 36px;
+  border: 3px solid #3d1f0a;
+  border-radius: 46px 46px 6px 6px / 30px 30px 6px 6px;
+  background:
+    linear-gradient(
+      90deg,
+      transparent 14%,
+      #e8b04a 14% 22%,
+      transparent 22% 78%,
+      #e8b04a 78% 86%,
+      transparent 86%
+    ),
+    linear-gradient(180deg, #c07436, #85471d);
+  transform-origin: 50% 100%;
+  transition: transform 0.4s cubic-bezier(0.3, 1.8, 0.5, 1);
+}
+
+.chest-lock {
+  position: absolute;
+  top: -8px;
+  left: 50%;
+  width: 20px;
+  height: 22px;
+  margin-left: -10px;
+  border: 3px solid #3d1f0a;
+  border-radius: 6px;
+  background: #ffd34d;
+}
+
+/* Kapağın aralığından sızan ışık: en iyi eşyanın renginde. */
+.chest-glow {
+  position: absolute;
+  top: 34px;
+  left: 50%;
+  width: 70px;
+  height: 6px;
+  margin-left: -35px;
+  border-radius: 50%;
+  background: var(--leak);
+  box-shadow: 0 0 22px 10px var(--leak);
+  opacity: 0;
+  transition:
+    opacity 0.3s,
+    box-shadow 0.3s;
+}
+
+.chest-stage.shaking .chest-art {
+  animation: chest-shake 0.13s linear infinite;
+}
+
+.chest-stage.shaking .chest-glow {
+  animation: leak-grow 0.75s ease-in forwards;
+}
+
+.chest-stage.open .chest-lid {
+  transform: translateY(-20px) rotate(-12deg);
+}
+
+.chest-stage.open .chest-glow {
+  opacity: 1;
+  box-shadow: 0 0 46px 26px var(--leak);
+}
+
+@keyframes chest-shake {
+  0%,
+  100% {
+    translate: 0 0;
+    rotate: 0deg;
+  }
+
+  25% {
+    translate: -3px 1px;
+    rotate: -3deg;
+  }
+
+  75% {
+    translate: 3px -1px;
+    rotate: 3deg;
+  }
+}
+
+@keyframes leak-grow {
+  from {
+    opacity: 0.2;
+  }
+
+  to {
+    opacity: 1;
+    box-shadow: 0 0 34px 16px var(--leak);
+  }
+}
+
+.reels {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.reel-window {
+  position: relative;
+  height: 80px;
+  overflow: hidden;
+  border: 2px solid rgb(255 255 255 / 14%);
+  border-radius: 14px;
+  background: rgb(8 10 24 / 62%);
+  mask-image: linear-gradient(90deg, transparent, #000 16%, #000 84%, transparent);
+}
+
+.reel-strip {
+  position: absolute;
+  top: 7px;
+  left: 0;
+  display: flex;
+  will-change: transform;
+}
+
+.reel-tile {
+  display: grid;
+  flex: 0 0 62px;
+  place-items: center;
+  height: 62px;
+  margin: 0 5px;
+  border: 3px solid var(--rc);
+  border-radius: 12px;
+  background: var(--card);
+  font-size: 34px;
+  transition:
+    transform 0.25s,
+    box-shadow 0.25s;
+}
+
+.reel-tile[data-rarity="0"] {
+  --rc: var(--r-common);
+}
+
+.reel-tile[data-rarity="1"] {
+  --rc: var(--r-rare);
+  background: #2c4670;
+}
+
+.reel-tile[data-rarity="2"] {
+  --rc: var(--r-epic);
+  background: #43356f;
+}
+
+.reel-tile[data-rarity="3"] {
+  --rc: var(--r-legendary);
+  background: #5f4219;
+}
+
+.reel-tile.win {
+  transform: scale(1.1);
+  box-shadow: 0 0 20px var(--rc);
+}
+
+.reel-marker {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 4px;
+  margin-left: -2px;
+  border-radius: 2px;
+  background: var(--accent);
+  box-shadow: 0 0 10px var(--accent);
+}
+
+.reel-window.tick .reel-marker {
+  animation: marker-bump 0.09s ease-out;
+}
+
+@keyframes marker-bump {
+  from {
+    scale: 1.8 1;
+  }
+}
+
+.chest-skip {
+  margin: 6px 0 0;
+  opacity: 0.7;
+}
+
+.chest-results {
+  display: none;
+  gap: 10px;
+}
+
+.chest-results.multi {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.chest-results.multi .card {
+  padding: 12px 6px 10px;
+  gap: 4px;
+}
+
+.chest-results.multi .card-icon {
+  font-size: 38px;
+}
+
+.chest-results.multi .card-title {
+  font-size: 15px;
+}
+
+.chest-results.multi .card-desc {
+  font-size: 12px;
+}
+
+.panel.chest.revealed .reels,
+.panel.chest.revealed .chest-skip {
+  display: none;
+}
+
+.panel.chest.revealed .chest-results {
+  display: grid;
+}
+
+.panel.chest:not(.revealed) .buttons {
+  visibility: hidden;
+}
+
+/* Efsanevi kart: üstünden geçen parıltı. */
+.chest-results .card[data-rarity="3"]::after,
+.evo-card::after,
+.cards .card[data-rarity="3"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(105deg, transparent 35%, rgb(255 255 255 / 32%) 50%, transparent 65%);
+  background-size: 260% 100%;
+  animation: card-shine 2.2s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes card-shine {
+  from {
+    background-position: 130% 0;
+  }
+
+  to {
+    background-position: -130% 0;
+  }
+}
+
+/* Seviye kartları: nadir parıltı, epik nabız, efsanevi altın ışıma. */
+.cards .card[data-rarity="1"] {
+  box-shadow:
+    inset 0 2px 0 rgb(255 255 255 / 10%),
+    0 6px 0 rgb(0 0 0 / 28%),
+    0 0 14px rgb(79 179 255 / 32%);
+}
+
+.cards .card[data-rarity="2"] {
+  animation:
+    card-in 0.25s ease-out both,
+    epic-pulse 1.6s ease-in-out 0.3s infinite;
+}
+
+.cards .card[data-rarity="3"] {
+  animation:
+    card-in 0.25s ease-out both,
+    legend-glow 1.1s ease-in-out 0.3s infinite alternate;
+}
+
+@keyframes epic-pulse {
+  50% {
+    box-shadow:
+      inset 0 2px 0 rgb(255 255 255 / 10%),
+      0 6px 0 rgb(0 0 0 / 28%),
+      0 0 24px rgb(199 125 255 / 60%);
+  }
+}
+
+@keyframes legend-glow {
+  to {
+    box-shadow:
+      inset 0 2px 0 rgb(255 255 255 / 14%),
+      0 6px 0 rgb(0 0 0 / 28%),
+      0 0 34px rgb(255 182 39 / 75%);
+  }
+}
+
+/* Açılış efektleri (rewardFx.ts). */
+.fx-glow,
+.fx-ring,
+.fx-rays,
+.fx-spark {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  pointer-events: none;
+}
+
+.fx-glow {
+  z-index: 0;
+  width: 240px;
+  height: 240px;
+  margin: -120px;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--fx), transparent 65%);
+  animation: fx-glow 1.5s ease-out forwards;
+}
+
+@keyframes fx-glow {
+  0% {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+
+  20% {
+    opacity: 0.85;
+    transform: scale(1);
+  }
+
+  100% {
+    opacity: 0;
+    transform: scale(1.2);
+  }
+}
+
+.fx-ring {
+  z-index: 2;
+  width: 40px;
+  height: 40px;
+  margin: -20px;
+  border: 4px solid var(--fx);
+  border-radius: 50%;
+  box-shadow: 0 0 16px var(--fx);
+  animation: fx-ring 0.9s ease-out forwards;
+}
+
+@keyframes fx-ring {
+  to {
+    opacity: 0;
+    transform: scale(7);
+  }
+}
+
+.fx-rays {
+  z-index: 0;
+  width: 440px;
+  height: 440px;
+  margin: -220px;
+  border-radius: 50%;
+  background: repeating-conic-gradient(
+    color-mix(in srgb, var(--fx) 60%, transparent) 0deg 7deg,
+    transparent 7deg 22deg
+  );
+  mask-image: radial-gradient(circle, #000 12%, transparent 68%);
+  animation: fx-rays 2.3s ease-out forwards;
+}
+
+.fx-rays.gold {
+  animation-duration: 3.9s;
+}
+
+@keyframes fx-rays {
+  0% {
+    opacity: 0;
+    transform: rotate(0deg) scale(0.4);
+  }
+
+  15% {
+    opacity: 1;
+    transform: rotate(18deg) scale(1);
+  }
+
+  80% {
+    opacity: 0.85;
+  }
+
+  100% {
+    opacity: 0;
+    transform: rotate(120deg) scale(1.1);
+  }
+}
+
+.fx-spark {
+  z-index: 2;
+  width: var(--s);
+  height: var(--s);
+  margin: calc(var(--s) / -2);
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 8px 2px var(--fx);
+  animation: fx-spark var(--d) ease-out forwards;
+}
+
+@keyframes fx-spark {
+  to {
+    opacity: 0;
+    transform: translate(var(--dx), var(--dy)) scale(0.3);
+  }
+}
+
+.fx-stamp {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 3;
+  color: #ffd34d;
+  font-family: var(--font-display);
+  font-size: 46px;
+  font-weight: 800;
+  white-space: nowrap;
+  -webkit-text-stroke: 2px #5a2a06;
+  paint-order: stroke fill;
+  text-shadow:
+    0 4px 0 #5a2a06,
+    0 0 26px rgb(255 200 60 / 85%);
+  pointer-events: none;
+  animation: fx-stamp 2.4s ease-out forwards;
+}
+
+@keyframes fx-stamp {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(3) rotate(-16deg);
+  }
+
+  12% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(0.92) rotate(-8deg);
+  }
+
+  18% {
+    transform: translate(-50%, -50%) scale(1) rotate(-8deg);
+  }
+
+  85% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -62%) scale(1) rotate(-8deg);
+  }
+}
+
+.fx-shake {
+  animation: fx-shake 0.35s linear;
+}
+
+.fx-shake-big {
+  animation: fx-shake 0.6s linear;
+}
+
+@keyframes fx-shake {
+  0%,
+  100% {
+    translate: 0 0;
+  }
+
+  20% {
+    translate: -5px 2px;
+  }
+
+  40% {
+    translate: 5px -2px;
+  }
+
+  60% {
+    translate: -4px -1px;
+  }
+
+  80% {
+    translate: 3px 1px;
+  }
+}
+
+.fx-flash {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+  background: radial-gradient(circle, #fff8d8, rgb(255 210 80 / 45%));
+  pointer-events: none;
+  animation: fx-flash 0.8s ease-out forwards;
+}
+
+@keyframes fx-flash {
+  from {
+    opacity: 0.9;
+  }
+
+  to {
+    opacity: 0;
+  }
+}
+
+.fx-confetti {
+  position: fixed;
+  top: -20px;
+  left: var(--x);
+  z-index: 6;
+  width: 9px;
+  height: 14px;
+  border-radius: 2px;
+  background: var(--c);
+  opacity: 0;
+  pointer-events: none;
+  animation: fx-confetti var(--dur) var(--delay) cubic-bezier(0.25, 0.6, 0.5, 1) forwards;
+}
+
+@keyframes fx-confetti {
+  0% {
+    opacity: 1;
+    transform: translate(0, 0) rotate(0deg);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translate(var(--dx), 105vh) rotate(var(--rot));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chest-stage.shaking .chest-art,
+  .cards .card[data-rarity],
+  .chest-results .card[data-rarity="3"]::after,
+  .evo-card::after,
+  .cards .card[data-rarity="3"]::after,
+  .fx-shake,
+  .fx-shake-big {
+    animation: none;
   }
 }
 

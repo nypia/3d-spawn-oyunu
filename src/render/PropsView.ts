@@ -16,6 +16,7 @@ import {
 } from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { Rng } from '../core/Rng';
+import { CHEST_BOSS, CHEST_PLAIN } from '../data/chests';
 import { SHRINE as SHRINE_CFG } from '../data/shrines';
 import {
   PICKUP_BAG,
@@ -46,7 +47,13 @@ const pos = new Vector3();
 const quat = new Quaternion();
 const scl = new Vector3();
 const WHITE = new Color(1, 1, 1);
-const CHEST_GOLD = new Color(1.6, 1.25, 0.45);
+/** Ödül sandıkları türüne göre renk: düz, elit (altın), boss (kızıl-mor), kazan (zehir yeşili). */
+const CHEST_TINTS = [
+  new Color(1, 1, 1),
+  new Color(1.6, 1.25, 0.45),
+  new Color(1.9, 0.55, 1.2),
+  new Color(0.7, 1.7, 0.6),
+];
 const SHRINE_USED = new Color(0.45, 0.45, 0.5);
 const SHRINE_GLOW = new Color(0x7fe3ff);
 const BEAM_CAP = 32;
@@ -238,9 +245,11 @@ export class PropsView {
       } else if (kind === CHEST) {
         // Kapalı sandık hafifçe zıplar, dikkat çeksin.
         pos.y += Math.abs(Math.sin(time * 2 + i)) * 0.08;
+        const tier = it.free[i] ? it.tier[i] : CHEST_PLAIN;
+        if (tier === CHEST_BOSS) scl.setScalar(1.5);
         m4.compose(pos, quat, scl);
         this.chests.setMatrixAt(nc, m4);
-        this.chests.setColorAt(nc, it.free[i] ? CHEST_GOLD : WHITE);
+        this.chests.setColorAt(nc, CHEST_TINTS[tier] ?? WHITE);
         nc++;
       } else if (kind === SHRINE) {
         m4.compose(pos, quat, scl);

@@ -55,7 +55,7 @@ describe('ganimet', () => {
     expect(w.chestPrice).toBe(Math.round(BALANCE.loot.chestBasePrice * BALANCE.loot.chestPriceGrowth));
     expect(w.reward?.kind).toBe('item');
     expect(w.paused).toBe(true);
-    const item = w.reward?.kind === 'item' ? w.reward.item : -1;
+    const item = w.reward?.kind === 'item' ? w.reward.items[0].item : -1;
     w.takeReward();
     expect(w.itemCounts[item]).toBe(1);
     expect(w.paused).toBe(false);

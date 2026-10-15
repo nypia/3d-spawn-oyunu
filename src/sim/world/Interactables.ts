@@ -1,4 +1,5 @@
 import type { Rng } from '../../core/Rng';
+import { CHEST_PLAIN } from '../../data/chests';
 import type { Heightmap } from '../terrain/Heightmap';
 import type { Obstacles } from './Obstacles';
 
@@ -18,8 +19,10 @@ export class Interactables {
   readonly kind: Uint8Array;
   /** 0 = kullanılabilir, 1 = kullanıldı (kırıldı / açıldı / doldu). */
   readonly used: Uint8Array;
-  /** Sandık: elitten düşen ücretsiz ödül sandığı. */
+  /** Sandık: elitten/boss'tan/kazandan düşen ücretsiz ödül sandığı. */
   readonly free: Uint8Array;
+  /** Sandık türü (CHEST_*: düz, elit, boss, kazan). */
+  readonly tier: Uint8Array;
   /** Tapınak dolum ilerlemesi (0..1). */
   readonly charge: Float32Array;
   readonly rotation: Float32Array;
@@ -31,6 +34,7 @@ export class Interactables {
     this.kind = new Uint8Array(capacity);
     this.used = new Uint8Array(capacity);
     this.free = new Uint8Array(capacity);
+    this.tier = new Uint8Array(capacity);
     this.charge = new Float32Array(capacity);
     this.rotation = new Float32Array(capacity);
   }
@@ -43,8 +47,32 @@ export class Interactables {
     this.z[i] = z;
     this.used[i] = 0;
     this.free[i] = free ? 1 : 0;
+    this.tier[i] = CHEST_PLAIN;
     this.charge[i] = 0;
     this.rotation[i] = rotation;
+    return i;
+  }
+
+  /**
+   * Ücretsiz ödül sandığı bırakır. Açılmış ücretsiz sandıkların yuvaları yeniden kullanılır
+   * (sonsuz koşuda havuz dolmasın).
+   */
+  addRewardChest(x: number, z: number, rotation: number, tier: number): number {
+    let i = -1;
+    for (let k = 0; k < this.count; k++) {
+      if (this.kind[k] === CHEST && this.used[k] && this.free[k]) {
+        i = k;
+        break;
+      }
+    }
+    if (i < 0) i = this.add(CHEST, x, z, rotation, true);
+    if (i < 0) return -1;
+    this.x[i] = x;
+    this.z[i] = z;
+    this.rotation[i] = rotation;
+    this.used[i] = 0;
+    this.free[i] = 1;
+    this.tier[i] = tier;
     return i;
   }
 

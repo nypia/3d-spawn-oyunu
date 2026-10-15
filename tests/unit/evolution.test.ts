@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Rng } from '../../src/core/Rng';
 import { BALANCE } from '../../src/data/balance';
+import { CHEST_BOSS, CHEST_ELITE } from '../../src/data/chests';
 import { ENEMY_INDEX } from '../../src/data/enemies';
 import { EVOLUTION_BY_WEAPON, EVOLUTIONS } from '../../src/data/evolutions';
 import { TOME_INDEX, TOMES } from '../../src/data/tomes';
@@ -154,5 +155,40 @@ describe('evrim koşulu', () => {
       expect(w.kills).toBeGreaterThan(0);
       expect(w.tintOf(evo.def.behavior)).toBe(evo.def.tint);
     }
+  });
+});
+
+describe('ödül sırası', () => {
+  it('boss sandığı: önce evrim, sonra en az nadir 3 farklı eşya', () => {
+    const w = arena();
+    maxOut(w);
+    giveTome(w, EVOLUTION_BY_WEAPON.magicBolt.tome);
+    w.openChest(CHEST_BOSS, w.player.x, w.player.y, w.player.z);
+    expect(w.reward).toEqual({ kind: 'evolution', slot: 0 });
+    expect(w.rewardQueue).toHaveLength(1);
+    w.takeReward();
+    expect(w.reward?.kind).toBe('item');
+    if (w.reward?.kind !== 'item') return;
+    const items = w.reward.items;
+    expect(items).toHaveLength(3);
+    expect(new Set(items.map((d) => d.item)).size).toBe(3);
+    for (const d of items) expect(d.rarity).toBeGreaterThanOrEqual(1);
+    w.takeReward();
+    expect(w.reward).toBeNull();
+    expect(w.paused).toBe(false);
+    for (const d of items) expect(w.itemCounts[d.item]).toBe(1);
+  });
+
+  it('açılmış ödül sandıklarının yuvası yeniden kullanılır', () => {
+    const w = arena();
+    const it = w.interactables;
+    const a = it.addRewardChest(5, 5, 0, CHEST_ELITE);
+    const count = it.count;
+    it.used[a] = 1;
+    const b = it.addRewardChest(9, 9, 0, CHEST_BOSS);
+    expect(b).toBe(a);
+    expect(it.count).toBe(count);
+    expect(it.tier[b]).toBe(CHEST_BOSS);
+    expect(it.used[b]).toBe(0);
   });
 });

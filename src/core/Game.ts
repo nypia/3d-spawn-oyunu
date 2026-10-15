@@ -1,4 +1,5 @@
 import { BALANCE } from '../data/balance';
+import { CHEST_PLAIN, CHEST_TIERS } from '../data/chests';
 import { EVOLUTION_BY_WEAPON } from '../data/evolutions';
 import { HEROES } from '../data/heroes';
 import { ITEMS } from '../data/items';
@@ -12,6 +13,7 @@ import type { PlayerInput } from '../sim/player/Player';
 import { RARITIES } from '../sim/progression/Rarity';
 import { describeUpgrade, slotUsage } from '../sim/progression/Upgrades';
 import { World } from '../sim/world/World';
+import type { RewardSounds } from '../ui/ChestReel';
 import { Hud } from '../ui/Hud';
 import { Screens } from '../ui/Screens';
 import { TouchControls } from '../ui/TouchControls';
@@ -41,6 +43,8 @@ export class Game {
   private readonly quality: QualitySettings;
   private readonly flags: Flags;
   private readonly simInput: PlayerInput = { moveX: 0, moveZ: 0, jump: false, slide: false };
+  /** Sandık çarkının ses kancaları (ses yöneticisi bağlar). */
+  private readonly rewardSounds: RewardSounds = {};
   private acc = 0;
   private lastHp = 0;
   private last = performance.now();
@@ -154,9 +158,14 @@ export class Game {
     for (const code of ['KeyE', 'Enter']) {
       inp.onKey(code, () => {
         const kind = this.world.reward?.kind;
-        if (this.state === 'reward' && (kind === 'item' || kind === 'evolution')) this.takeReward(0);
+        if (this.state !== 'reward' || (kind !== 'item' && kind !== 'evolution')) return;
+        // İlk basış çarkı atlatır, ikincisi ödülü alır.
+        if (!this.screens.skipChest()) this.takeReward(0);
       });
     }
+    inp.onKey('Space', () => {
+      if (this.state === 'reward') this.screens.skipChest();
+    });
     inp.onKey('KeyR', () => {
       if (this.state === 'levelup') this.reroll();
     });
@@ -286,24 +295,33 @@ export class Game {
       );
       return;
     }
-    const def = ITEMS[r.item];
-    this.screens.showItem(
+    const tier = CHEST_TIERS[r.source] ?? CHEST_TIERS[0];
+    this.screens.showChest(
       {
-        title: 'Sandık açıldı!',
-        icon: def.icon,
-        name: def.name,
-        description: def.description,
-        rarity: r.rarity,
-        rarityName: RARITIES[r.rarity].name,
-        owned: this.world.itemCounts[r.item],
+        title: r.source === CHEST_PLAIN ? 'Sandık açıldı!' : `${tier.name}!`,
+        tier: r.source,
+        items: r.items.map((d) => {
+          const def = ITEMS[d.item];
+          return {
+            icon: def.icon,
+            rarity: d.rarity,
+            name: def.name,
+            description: def.description,
+            rarityName: RARITIES[d.rarity].name,
+            owned: this.world.itemCounts[d.item],
+          };
+        }),
+        pool: ITEMS.map((d) => ({ icon: d.icon, rarity: d.rarity })),
       },
+      this.rewardSounds,
       () => this.takeReward(0),
     );
   }
 
   private takeReward(choice: number): void {
     this.world.takeReward(choice);
-    if (this.world.offer) this.showLevelUp();
+    if (this.world.reward) this.showReward();
+    else if (this.world.offer) this.showLevelUp();
     else this.resume();
   }
 

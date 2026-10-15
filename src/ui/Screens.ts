@@ -7,17 +7,9 @@ import { WEAPON_INDEX, WEAPONS, weaponMaxLevel } from '../data/weapons';
 import { RARITIES } from '../sim/progression/Rarity';
 import type { SlotUsage, UpgradeView } from '../sim/progression/Upgrades';
 import type { World } from '../sim/world/World';
+import { ChestReel, type ChestView, type RewardSounds } from './ChestReel';
 import { formatTime, h } from './dom';
-
-export interface ItemView {
-  title: string;
-  icon: string;
-  name: string;
-  description: string;
-  rarity: number;
-  rarityName: string;
-  owned: number;
-}
+import { revealBurst } from './rewardFx';
 
 export interface EvolutionView {
   fromIcon: string;
@@ -59,6 +51,8 @@ export interface LevelUpCharges {
 /** Tam ekran katmanlar: başlangıç, seviye atlama, duraklatma, oyun sonu. */
 export class Screens {
   private readonly el: HTMLDivElement;
+  /** Açık sandık çarkı (atlatma için). */
+  private chest: ChestReel | null = null;
 
   constructor(parent: HTMLElement) {
     this.el = h('div.overlay');
@@ -67,11 +61,18 @@ export class Screens {
   }
 
   hide(): void {
+    this.endChest();
     this.el.replaceChildren();
     this.el.style.display = 'none';
   }
 
+  private endChest(): void {
+    this.chest?.destroy();
+    this.chest = null;
+  }
+
   private show(...children: Node[]): void {
+    this.endChest();
     this.el.className = 'overlay';
     this.el.replaceChildren(...children);
     this.el.style.display = '';
@@ -178,25 +179,17 @@ export class Screens {
     );
   }
 
-  /** Sandıktan çıkan eşya: nadirlik renkli kart + AL butonu. */
-  showItem(view: ItemView, onTake: () => void): void {
-    const take = h(
-      'button.btn.btn-primary',
-      { 'data-testid': 'take' },
-      'AL',
-      h('span.keys-only', {}, ' (E)'),
-    );
-    take.addEventListener('click', onTake);
-    const card = h(
-      'div.card.item-card',
-      { 'data-rarity': String(view.rarity) },
-      h('span.card-icon', {}, view.icon),
-      h('span.card-title', {}, view.name),
-      h('span.card-desc', {}, view.description),
-      h('span.card-rarity', {}, view.rarityName),
-    );
-    if (view.owned > 0) card.append(h('span.card-badge', {}, `Şu an ${view.owned} adet → ${view.owned + 1}`));
-    this.show(h('div.panel.reward', {}, h('h2', {}, view.title), card, h('div.buttons', {}, take)));
+  /** Sandık açılışı: dönen eşya şeritleri, nadirliğe göre açılış efekti, AL butonu. */
+  showChest(view: ChestView, sounds: RewardSounds, onTake: () => void): void {
+    const reel = new ChestReel(view, this.el, sounds, onTake);
+    this.show(reel.el);
+    this.chest = reel;
+    reel.start();
+  }
+
+  /** Sandık animasyonu sürüyorsa atlatır (true); bittiyse false. */
+  skipChest(): boolean {
+    return this.chest?.skip() ?? false;
   }
 
   /** Sandıktan evrim: eski silah + kitap → yeni silah. */
@@ -217,15 +210,17 @@ export class Screens {
       h('span.card-desc', {}, view.description),
       h('span.card-badge', {}, `★ ${view.fromName} evrimleşiyor`),
     );
+    const host = h('div.evo-stage', {}, card);
     this.show(
       h(
         'div.panel.reward',
         { 'data-testid': 'evolution' },
         h('h2', {}, 'Evrim!'),
-        card,
+        host,
         h('div.buttons', {}, take),
       ),
     );
+    revealBurst(host, this.el, 3, 'EVRİM!');
   }
 
   /** Tapınak doldu: üç bonustan birini seç. */

@@ -18,7 +18,7 @@ export default defineConfig({
     reuseExistingServer: true,
   },
   projects: [
-    { name: 'desktop', testMatch: 'smoke.spec.ts', use: { ...devices['Desktop Chrome'] } },
+    { name: 'desktop', testMatch: /(smoke|chest)\.spec\.ts/, use: { ...devices['Desktop Chrome'] } },
     { name: 'mobile', testMatch: 'touch.spec.ts', use: { ...devices['Pixel 7 landscape'] } },
   ],
 });
