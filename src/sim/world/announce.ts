@@ -10,3 +10,7 @@ export const ANN_GOBLIN_ESCAPE = 2;
 export const ANN_CAULDRON = 3;
 /** Pakt yapıldı: değer = PACTS indeksi. */
 export const ANN_PACT = 4;
+/** Boss yaklaşıyor / doğdu / yenildi: değer = BOSSES indeksi. */
+export const ANN_BOSS_WARN = 5;
+export const ANN_BOSS_SPAWN = 6;
+export const ANN_BOSS_DEAD = 7;

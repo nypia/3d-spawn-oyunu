@@ -16,6 +16,7 @@ import {
   Vector3,
 } from 'three';
 import { BALANCE } from '../data/balance';
+import { BOSSES } from '../data/bosses';
 import { ENEMIES, EXPLODER, SHOT_ORB } from '../data/enemies';
 import { GEM_TIERS, gemTier } from '../data/gems';
 import { ST_ACT, ST_WINDUP } from '../sim/enemies/EnemyPool';
@@ -39,6 +40,11 @@ const WHITE = new Color(1, 1, 1);
 /** Elitler altın tonda parlar. */
 const ELITE_TINT = new Color(1.55, 1.3, 0.6);
 const FUSE_FLASH = new Color(3, 2.2, 1.2);
+/** Boss'lar kendi renklerine hafifçe boyanır ve biraz parlar. */
+const BOSS_TINTS: (Color | undefined)[] = ENEMIES.map((d) => {
+  const b = BOSSES.find((x) => x.enemy === d.id);
+  return b ? new Color(1.15, 1.15, 1.15).lerp(new Color(b.color).multiplyScalar(1.5), 0.3) : undefined;
+});
 /** Donmuş düşman: buz mavisi. */
 const ICE_TINT = new Color(0.6, 0.9, 1.35);
 const ARROW_FWD = new Vector3(0, 0, 1);
@@ -315,7 +321,7 @@ export class WorldView {
     const bob = def.behavior === 'phase' ? Math.sin(time * 2.6 + e.phase[i]) * 0.12 : 0;
     pos.set(e.x[i], e.y[i] + e.hover[i] + bob, e.z[i]);
     const p = world.player;
-    const windup = !!def.dash && e.state[i] === ST_WINDUP;
+    const windup = (!!def.dash || def.role === 'boss') && e.state[i] === ST_WINDUP;
     const yaw =
       def.behavior === 'ranged' || windup
         ? Math.atan2(p.x - e.x[i], p.z - e.z[i])
@@ -329,7 +335,8 @@ export class WorldView {
     // Patlayanın fitili yanıyor: şişer ve turuncu yanıp söner.
     const fusing = !!look.fuse && e.timer[i] >= 0;
     const blink = fusing && !frozen && Math.floor(time * 12) % 2 === 0;
-    crowd.setColorAt(k, frozen ? ICE_TINT : blink ? FUSE_FLASH : e.elite[i] ? ELITE_TINT : WHITE);
+    const base = BOSS_TINTS[type] ?? (e.elite[i] ? ELITE_TINT : WHITE);
+    crowd.setColorAt(k, frozen ? ICE_TINT : blink ? FUSE_FLASH : base);
     // Okçu/bekçi atıştan hemen önce yayı çeker ya da küreyi kaldırır; vampir çömelip atılır; diğerleri
     // yürüdükleri yol kadar adım atar.
     const draw = def.ranged?.castTime ?? 0.6;
@@ -343,7 +350,9 @@ export class WorldView {
     } else if (look.shoot && !frozen && e.timer[i] >= 0 && e.timer[i] < draw) {
       crowd.setAnim(k, look.shoot, ((draw - e.timer[i]) / draw) * look.shoot.duration, flash);
     } else {
-      const cycle = (e.travel[i] + e.phase[i] * look.stride) / look.stride;
+      // Büyük gövde (elit, boss) daha uzun adım atar.
+      const stride = look.stride * e.scale[i];
+      const cycle = (e.travel[i] + e.phase[i] * stride) / stride;
       crowd.setAnim(k, look.walk, cycle * look.walk.duration, flash);
     }
   }

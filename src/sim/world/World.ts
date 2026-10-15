@@ -1,5 +1,6 @@
 import { Rng } from '../../core/Rng';
 import { BALANCE, xpToNext } from '../../data/balance';
+import { BOSS } from '../../data/bosses';
 import { CHEST_BOSS, CHEST_ELITE, CHEST_PLAIN, CHEST_TIERS } from '../../data/chests';
 import {
   type DashParams,
@@ -18,8 +19,11 @@ import { TOME_INDEX, TOMES, tomeValue } from '../../data/tomes';
 import { TORCH, TORCH_DROPS, type TorchDrop, torchDropWeights } from '../../data/torches';
 import { WEAPON_INDEX, WEAPONS, type WeaponBehavior, weaponMaxLevel } from '../../data/weapons';
 import { Blasts } from '../combat/Blasts';
+import { Hazards, HZF_VISUAL } from '../combat/Hazards';
 import { PF_GROUND_FOLLOW, PF_RETURNING, PF_RETURNS, ProjectilePool } from '../combat/ProjectilePool';
+import { BossController } from '../enemies/Bosses';
 import {
+  EF_BOSS,
   EF_NOLOOT,
   EF_SPECIAL,
   EnemyPool,
@@ -176,6 +180,14 @@ export class World {
   readonly goblinFx = new EventRing(16, 4);
   /** Ruh Kazanı, Lanet Sunağı, Hazine Goblini. */
   readonly landmarks = new Landmarks();
+  /** Boss saldırılarının gecikmeli tehlike alanları. */
+  readonly hazards = new Hazards(96);
+  /** Tetiklenen tehlike: x,z,x2,z2,tür,yarıçap */
+  readonly hazardFx = new EventRing(64, 6);
+  readonly bosses = new BossController();
+  /** Kamera sarsıntısı isteği (render okur): sayaç her istekte artar. */
+  shakeSeq = 0;
+  shakeAmp = 0;
   readonly blasts = new Blasts(48);
 
   enemyCap: number;
@@ -297,6 +309,8 @@ export class World {
     this.updateInteractables();
     this.landmarks.update(this, dt);
     this.updateTorches(dt);
+    this.bosses.update(this);
+    this.updateHazards(dt);
     this.director.update(this, dt);
 
     e.removeDead();
@@ -533,7 +547,14 @@ export class World {
   /** Düşmanı `seconds` boyunca dondurur (süre uzatılmaz, en uzunu geçerli). */
   freezeEnemy(i: number, seconds: number): void {
     const e = this.enemies;
-    if (!e.dead[i]) e.frozen[i] = Math.max(e.frozen[i], seconds);
+    // Boss'lar donmaz.
+    if (!e.dead[i] && !(e.flags[i] & EF_BOSS)) e.frozen[i] = Math.max(e.frozen[i], seconds);
+  }
+
+  /** Render'dan kamera sarsıntısı iste. */
+  shake(amp: number): void {
+    this.shakeSeq++;
+    this.shakeAmp = amp;
   }
 
   /**
@@ -627,11 +648,12 @@ export class World {
     const p = this.player;
     for (let i = 0; i < e.count; i++) {
       if (e.dead[i] || (e.x[i] - p.x) ** 2 + (e.z[i] - p.z) ** 2 > radius * radius) continue;
-      if (!e.elite[i]) {
+      const boss = e.flags[i] & EF_BOSS;
+      if (!e.elite[i] && !boss) {
         this.killEnemy(i);
         continue;
       }
-      const dmg = e.maxHp[i] * TORCH.rosaryEliteFrac;
+      const dmg = e.maxHp[i] * (boss ? BOSS.rosaryFrac : TORCH.rosaryEliteFrac);
       e.hp[i] -= dmg;
       e.flash[i] = 0.12;
       this.damageDealt += dmg;
@@ -687,7 +709,8 @@ export class World {
           this.chestPrice = Math.round(this.chestPrice * L.chestPriceGrowth);
         }
         it.used[i] = 1;
-        this.openChest(free ? it.tier[i] : CHEST_PLAIN, it.x[i], y, it.z[i]);
+        const minRarity = free && it.level[i] > 0 ? (it.level[i] as Rarity) : undefined;
+        this.openChest(free ? it.tier[i] : CHEST_PLAIN, it.x[i], y, it.z[i], minRarity);
       }
     }
   }
@@ -842,6 +865,14 @@ export class World {
             uz = tz / tl;
             break;
           }
+          case 'boss': {
+            const o = this.tmp3;
+            this.bosses.steer(this, i, ux, uz, dist, dt, o);
+            ux = o[0];
+            uz = o[1];
+            sp = o[2];
+            break;
+          }
           case 'flee': {
             // Hazine Goblini: oyuncudan kaçar; süresi dolar ya da çok uzaklaşırsa kaybolur.
             if (!this.landmarks.goblinMove(this, i, dist, dt)) continue;
@@ -900,9 +931,10 @@ export class World {
       // Ayrışma (uzaktakiler için 3 tick'te bir — LOD).
       let sx = 0;
       let sz = 0;
-      if (dist < 30 || (i + this.tick) % 3 === 0) {
+      const isBoss = e.flags[i] & EF_BOSS;
+      if (!isBoss && (dist < 30 || (i + this.tick) % 3 === 0)) {
         const ri = e.radius[i];
-        const n = this.enemyGrid.query(x, z, ri + 0.7, buf);
+        const n = this.enemyGrid.query(x, z, ri + Math.max(0.7, this.hitPad), buf);
         for (let k = 0; k < n; k++) {
           const j = buf[k];
           if (j === i || e.dead[j]) continue;
@@ -916,7 +948,8 @@ export class World {
             sx += (i & 1 ? 1 : -1) * 0.05;
             continue;
           }
-          const push = (minD - d) * 0.5;
+          // Boss kalabalığı yararak ilerler.
+          const push = (minD - d) * (e.flags[j] & EF_BOSS ? 1.5 : 0.5);
           sx += (ox / d) * push;
           sz += (oz / d) * push;
         }
@@ -932,7 +965,8 @@ export class World {
       let nx = x + (vx + e.kx[i]) * dt + sx;
       let nz = z + (vz + e.kz[i]) * dt + sz;
 
-      if (def.behavior === 'phase') {
+      // Hayaletler ve havadaki (zıplayan) boss engellerden geçer.
+      if (def.behavior === 'phase' || e.hover[i] > 1.5) {
         tmp[0] = nx;
         tmp[1] = nz;
       } else this.obstacles.resolve(nx, nz, e.radius[i], tmp);
@@ -978,7 +1012,9 @@ export class World {
     if (frozen) return;
     e.contactCd[i] = PB.contactCooldown;
     const dash = ENEMIES[e.type[i]].dash;
-    const dealt = this.hurtPlayer(e.damage[i] * (dash && e.state[i] === ST_ACT ? dash.damageMul : 1));
+    const charging = e.state[i] === ST_ACT;
+    const mul = !charging ? 1 : dash ? dash.damageMul : e.flags[i] & EF_BOSS ? BOSS.dashDamageMul : 1;
+    const dealt = this.hurtPlayer(e.damage[i] * mul);
     const thorns = this.itemCounts[ITEM_INDEX.thorns];
     if (thorns > 0 && dealt > 0) {
       this.damageEnemy(i, (dealt * ITEM_FX.thornsMult * thorns) / this.stats.get('damage'), -ux, -uz);
@@ -1044,6 +1080,7 @@ export class World {
       // Patlamayı kuyruğa al (zincirleme patlamalar özyineleme yapmasın).
       this.addBlast(x, z, ITEM_FX.skullRadius, ITEM_FX.skullDamage, 3, 0.05);
     }
+    if (e.flags[i] & EF_BOSS) this.bosses.onDeath(this, i);
     this.deathFx.push(x, e.y[i] + e.hover[i], z, e.type[i], yaw, e.scale[i]);
   }
 
@@ -1088,6 +1125,53 @@ export class World {
       this.director.damageMultiplier(this.time, this.cycle) *
       this.mods.enemyDamage *
       (e.elite[i] ? ELITE.damage : 1);
+  }
+
+  /** Boss küre dalgası gibi doğrudan düşman mermisi (yön birim vektör, yatay). */
+  spawnEnemyShot(
+    x: number,
+    y: number,
+    z: number,
+    dirX: number,
+    dirZ: number,
+    speed: number,
+    damage: number,
+    kind: number,
+    radius: number,
+    life: number,
+    homing: number,
+  ): void {
+    const s = this.enemyShots;
+    const j = s.add();
+    if (j < 0) return;
+    s.x[j] = x;
+    s.y[j] = y;
+    s.z[j] = z;
+    s.vx[j] = dirX * speed;
+    s.vy[j] = 0;
+    s.vz[j] = dirZ * speed;
+    s.life[j] = s.maxLife[j] = life;
+    s.radius[j] = radius;
+    s.homing[j] = homing;
+    s.kind[j] = kind;
+    s.damage[j] = damage;
+    if (kind === SHOT_ORB) s.flags[j] = PF_GROUND_FOLLOW;
+  }
+
+  /** Süresi dolan tehlike alanları patlar: içindeki (yeterince yükseğe zıplamamış) oyuncu hasar alır. */
+  private updateHazards(dt: number): void {
+    const h = this.hazards;
+    const p = this.player;
+    for (let i = h.count - 1; i >= 0; i--) {
+      h.delay[i] -= dt;
+      if (h.delay[i] > 0) continue;
+      if (!(h.flags[i] & HZF_VISUAL)) {
+        const ground = this.terrain.heightAt(p.x, p.z);
+        if (h.contains(i, p.x, p.z, PB.radius) && p.y - ground < 1.2) this.hurtPlayer(h.damage[i]);
+        this.hazardFx.push(h.x[i], h.z[i], h.x2[i], h.z2[i], h.kind[i], h.radius[i]);
+      }
+      h.removeAt(i);
+    }
   }
 
   private updateEnemyShots(dt: number): void {

@@ -23,6 +23,7 @@ import type { GameAssets } from './assets/loadAssets';
 import { CameraRig } from './CameraRig';
 import { DamageNumbers } from './DamageNumbers';
 import { Effects } from './fx/Effects';
+import { HazardView } from './HazardView';
 import { HeroView } from './HeroView';
 import { PropsView } from './PropsView';
 import { PulseFx } from './PulseFx';
@@ -44,6 +45,7 @@ export class Renderer3D {
   private readonly sun: DirectionalLight;
   private readonly hero: HeroView;
   private readonly worldView: WorldView;
+  private readonly hazardView = new HazardView();
   private readonly weaponFx = new WeaponFx();
   private readonly props: PropsView;
   private readonly pulses = new PulseFx();
@@ -118,6 +120,7 @@ export class Renderer3D {
       ...this.hero.objects,
       this.weaponFx.root,
       this.props.root,
+      this.hazardView.root,
       this.pulses.mesh,
       this.effects.root,
       this.damageNumbers.mesh,
@@ -250,6 +253,7 @@ export class Renderer3D {
     this.effects.begin();
     this.weaponFx.update(world, this.time, dt, this.orbHalo);
     this.props.update(world, this.time);
+    this.hazardView.update(world, this.time);
     this.scatter.update(this.time, p.x, p.z);
     this.sky.update(this.camera.position, this.time);
     this.pulses.update(world, dt);

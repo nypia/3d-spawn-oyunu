@@ -1,11 +1,21 @@
 import { BALANCE } from '../data/balance';
+import { BOSSES } from '../data/bosses';
 import { ENEMIES, ENEMY_INDEX } from '../data/enemies';
 import { ITEMS } from '../data/items';
 import { PACTS } from '../data/pacts';
 import { TOMES } from '../data/tomes';
 import { WAVE_EVENTS } from '../data/waves';
 import { EF_SPECIAL } from '../sim/enemies/EnemyPool';
-import { ANN_CAULDRON, ANN_EVENT, ANN_GOBLIN, ANN_GOBLIN_ESCAPE, ANN_PACT } from '../sim/world/announce';
+import {
+  ANN_BOSS_DEAD,
+  ANN_BOSS_SPAWN,
+  ANN_BOSS_WARN,
+  ANN_CAULDRON,
+  ANN_EVENT,
+  ANN_GOBLIN,
+  ANN_GOBLIN_ESCAPE,
+  ANN_PACT,
+} from '../sim/world/announce';
 import { CAULDRON } from '../sim/world/Interactables';
 import type { World } from '../sim/world/World';
 import { formatTime, h } from './dom';
@@ -48,6 +58,9 @@ export class Hud {
     h('span.goblin-arrow-text'),
   );
   private goblinShown = false;
+  /** Ekranın üstünde boss can barları. */
+  private readonly bossBars = h('div.boss-bars', { 'data-testid': 'boss-bars' });
+  private lastBossKey = '';
   private annCursor = 0;
   private lastLoadoutKey = '';
   private lastText = { level: '', timer: '', kills: '', gold: '', hp: '', hint: '', toast: '' };
@@ -67,6 +80,7 @@ export class Hud {
       this.toast,
       this.banner,
       this.goblinArrow,
+      this.bossBars,
       h('div.hp-bar', {}, this.hpFill, this.hpText),
     );
     parent.append(this.el);
@@ -117,6 +131,7 @@ export class Hud {
     this.updateBanner(world);
 
     this.updateGoblinArrow(world, cameraYaw);
+    this.updateBossBars(world);
 
     const chest = world.nearbyChest();
     const spot = chest ? null : world.nearbyLandmark();
@@ -185,7 +200,7 @@ export class Hud {
       this.bannerQueue.length = 0;
     }
     this.annCursor = world.announceFx.drain(this.annCursor, (d, o) => {
-      const a = announcement(d[o], d[o + 1], d[o + 2]);
+      const a = announcement(d[o], d[o + 1], d[o + 2], world.cycle);
       if (a) this.bannerQueue.push(a);
     });
     const now = performance.now();
@@ -203,6 +218,25 @@ export class Hud {
     void this.banner.offsetWidth;
     this.banner.classList.add('show');
     this.bannerUntil = now + next.ms;
+  }
+
+  private updateBossBars(world: World): void {
+    const bars = world.bosses.active.length ? world.bosses.bars(world) : [];
+    const key = bars.map((b) => b.name).join('|');
+    if (key !== this.lastBossKey) {
+      this.lastBossKey = key;
+      this.bossBars.replaceChildren(
+        ...bars.map((b) => {
+          const fill = h('div.boss-fill');
+          fill.style.background = `#${b.color.toString(16).padStart(6, '0')}`;
+          return h('div.boss-bar', {}, h('div.boss-name', {}, `👑 ${b.name}`), h('div.boss-track', {}, fill));
+        }),
+      );
+    }
+    bars.forEach((b, k) => {
+      const fill = this.bossBars.children[k]?.querySelector('.boss-fill') as HTMLElement | null;
+      if (fill) fill.style.transform = `scaleX(${b.frac})`;
+    });
   }
 
   /** Hazine Goblini ekrandayken kenarda dönen ok + mesafe. */
@@ -251,7 +285,17 @@ const EVENT_VERB = {
   horde: 'duvar gibi yürüyor!',
 };
 
-function announcement(kind: number, value: number, extra: number): Announcement | null {
+function announcement(kind: number, value: number, extra: number, cycle: number): Announcement | null {
+  const boss = BOSSES[value];
+  const bossName = boss ? (cycle > 1 ? `Kanlı ${boss.name}` : boss.name) : '';
+  if (kind === ANN_BOSS_WARN && boss) {
+    const sub = boss.final ? 'Final boss · 10 saniye' : '10 saniye içinde geliyor';
+    return { title: `⚠ ${bossName} yaklaşıyor!`, sub, style: 'boss', ms: 3000 };
+  }
+  if (kind === ANN_BOSS_SPAWN && boss)
+    return { title: `👑 ${bossName}`, sub: boss.title, style: 'boss', ms: 3000 };
+  if (kind === ANN_BOSS_DEAD && boss)
+    return { title: `🏆 ${bossName} yenildi!`, sub: 'Boss sandığını aç', style: 'gold', ms: 3000 };
   if (kind === ANN_EVENT) {
     const ev = WAVE_EVENTS[value];
     if (!ev) return null;

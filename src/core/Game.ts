@@ -47,6 +47,7 @@ export class Game {
   private readonly rewardSounds: RewardSounds = {};
   private acc = 0;
   private lastHp = 0;
+  private lastShake = 0;
   private last = performance.now();
 
   constructor(root: HTMLElement, assets: GameAssets) {
@@ -374,6 +375,10 @@ export class Game {
       this.debug?.recordSim(performance.now() - t0);
 
       if (w.player.hp < this.lastHp - 0.5) rig.addShake(0.22);
+      if (w.shakeSeq !== this.lastShake) {
+        this.lastShake = w.shakeSeq;
+        rig.addShake(w.shakeAmp);
+      }
       this.lastHp = w.player.hp;
 
       if (w.gameOver) {

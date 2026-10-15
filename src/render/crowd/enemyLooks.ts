@@ -158,9 +158,11 @@ function makeGhostly(mat: Material | Material[]): void {
 
 export function buildEnemyLooks(assets: GameAssets, capacity: number): (EnemyLook | null)[] {
   return ENEMIES.map((def) => {
-    const rig = bake(assets, def.id, def.hover);
+    // Boss'lar başka türün rig'ini (büyütülmüş) kullanır; sahnede en fazla birkaç tane olur.
+    const base = def.model ?? def.id;
+    const rig = bake(assets, base, def.hover);
     if (!rig) return null;
-    const crowd = new CrowdMesh(rig, capacity);
+    const crowd = new CrowdMesh(rig, def.role === 'boss' ? 8 : capacity);
     crowd.name = `enemy:${def.id}`;
     if (def.behavior === 'phase') makeGhostly(crowd.material);
     return {
@@ -171,7 +173,7 @@ export function buildEnemyLooks(assets: GameAssets, capacity: number): (EnemyLoo
       fuse: rig.clips.fuse,
       windup: rig.clips.windup,
       dash: rig.clips.dash,
-      stride: STRIDE[def.id] ?? 2,
+      stride: STRIDE[base] ?? 2,
     };
   });
 }

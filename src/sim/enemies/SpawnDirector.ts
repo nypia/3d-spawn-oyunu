@@ -1,5 +1,6 @@
 import type { Rng } from '../../core/Rng';
 import { BALANCE } from '../../data/balance';
+import { BOSS } from '../../data/bosses';
 import { ELITE, ENEMIES, ENEMY_INDEX } from '../../data/enemies';
 import { CYCLE, WAVE_EVENTS, type WaveEvent, waveWeights } from '../../data/waves';
 import { ANN_EVENT } from '../world/announce';
@@ -70,7 +71,9 @@ export class SpawnDirector {
 
     const curse = 1 + Math.max(0, world.stats.get('curse'));
     const calm = t < this.calmUntil ? 0 : 1;
-    const rate = this.creditRate(tl) * CYCLE.credit ** (c - 1) * curse * calm;
+    // Boss sahnedeyken normal akış seyrelir.
+    const boss = world.bosses.active.length > 0 ? BOSS.creditMulAlive : 1;
+    const rate = this.creditRate(tl) * CYCLE.credit ** (c - 1) * curse * calm * boss;
     this.credit = Math.min(S.maxStoredCredit, this.credit + rate * dt);
 
     // Önce tür seç, sonra kredisini biriktir.

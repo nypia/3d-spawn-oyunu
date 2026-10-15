@@ -1,6 +1,7 @@
 import { Color, Group, IcosahedronGeometry, MeshLambertMaterial, NormalBlending, type Vector3 } from 'three';
 import { ENEMIES } from '../../data/enemies';
 import { GEM_TIERS, gemTier } from '../../data/gems';
+import { HZ_BOULDER, HZ_LINE } from '../../sim/combat/Hazards';
 import { PROJ_BOLT } from '../../sim/combat/ProjectilePool';
 import {
   PICKUP_BAG,
@@ -96,6 +97,7 @@ export class Effects {
   private breakCursor = 0;
   private collectCursor = 0;
   private soulCursor = 0;
+  private hazardCursor = 0;
   private goblinCursor = 0;
   private readonly souls: Soul[] = [];
   private lastLevel = 1;
@@ -138,6 +140,7 @@ export class Effects {
     this.breakCursor = world.breakFx.written;
     this.collectCursor = world.collectFx.written;
     this.soulCursor = world.soulFx.written;
+    this.hazardCursor = world.hazardFx.written;
     this.goblinCursor = world.goblinFx.written;
     this.souls.length = 0;
     this.lastLevel = world.level;
@@ -333,7 +336,7 @@ export class Effects {
     this.deathCursor = world.deathFx.drain(this.deathCursor, (d, o) => {
       if (deaths++ >= MAX_DEATHS) return;
       const def = ENEMIES[d[o + 3]];
-      const look = DEATH[def?.id ?? ''] ?? { colors: [0xffffff, 0xcccccc], n: 5, size: 0.2 };
+      const look = DEATH[def?.model ?? def?.id ?? ''] ?? { colors: [0xffffff, 0xcccccc], n: 5, size: 0.2 };
       const s = d[o + 5];
       const [x, y, z] = [d[o], d[o + 1] + 0.6 * s, d[o + 2]];
       this.shards(x, y, z, look.n, look.colors, look.size * s);
@@ -444,6 +447,29 @@ export class Effects {
         t: 0,
         dur: 0.35 + dist * 0.06,
       });
+    });
+
+    this.hazardCursor = world.hazardFx.drain(this.hazardCursor, (d, o) => {
+      const [x, z, x2, z2, kind, r] = [d[o], d[o + 1], d[o + 2], d[o + 3], d[o + 4], d[o + 5]];
+      const y = world.terrain.heightAt(x, z);
+      if (kind === HZ_LINE) {
+        // Diken çizgisi: boyunca yerden fırlayan kemik parçaları.
+        const len = Math.hypot(x2 - x, z2 - z);
+        const n = Math.min(14, Math.ceil(len / 1.4));
+        for (let k = 0; k <= n; k++) {
+          const px = x + ((x2 - x) * k) / n;
+          const pz = z + ((z2 - z) * k) / n;
+          const py = world.terrain.heightAt(px, pz);
+          this.shards(px, py + 0.3, pz, 2, [0xf2ead8, 0xc9bfa5], 0.22);
+          this.sparks(px, py + 0.2, pz, 2, 0xff5a3a, 2.4, 5, 0.14, 0.4);
+        }
+        this.puff((x + x2) / 2, y + 0.3, (z + z2) / 2, 5, 0x6a5f52, 0.55, len * 0.3, 0.9, 2, 1.2);
+        return;
+      }
+      this.flash(x, y + 0.6, z, r * 1.3, 0xff7a40, 2.6, 0.18);
+      this.sparks(x, y + 0.3, z, Math.round(8 + r * 3), 0xff5a2a, 3, 5 + r, 0.18, 0.5, 10);
+      this.puff(x, y + 0.2, z, Math.round(3 + r), 0x6a5f52, 0.6, r * 0.5, 0.9, r * 0.8, 1.2);
+      if (kind === HZ_BOULDER) this.shards(x, y + 0.6, z, 6, [0x8a7f72, 0x6a6258], 0.3);
     });
 
     this.goblinCursor = world.goblinFx.drain(this.goblinCursor, (d, o) => {
