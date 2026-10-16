@@ -2,6 +2,7 @@ import { AudioManager } from '../audio/AudioManager';
 import { SoundEvents } from '../audio/SoundEvents';
 import type { MusicTrack } from '../audio/sounds';
 import { BALANCE } from '../data/balance';
+import { BOSSES } from '../data/bosses';
 import { CHEST_PLAIN, CHEST_TIERS } from '../data/chests';
 import { EVOLUTION_BY_WEAPON } from '../data/evolutions';
 import { HEROES } from '../data/heroes';
@@ -15,6 +16,7 @@ import { Renderer3D } from '../render/Renderer3D';
 import type { PlayerInput } from '../sim/player/Player';
 import { RARITIES } from '../sim/progression/Rarity';
 import { describeUpgrade, slotUsage } from '../sim/progression/Upgrades';
+import { summarizeRun } from '../sim/world/RunStats';
 import { World } from '../sim/world/World';
 import type { RewardSounds } from '../ui/ChestReel';
 import { Hud } from '../ui/Hud';
@@ -25,7 +27,7 @@ import { type Flags, readFlags } from './flags';
 import { Input } from './Input';
 import { randomSeed } from './Rng';
 
-type State = 'menu' | 'playing' | 'levelup' | 'reward' | 'paused' | 'gameover';
+type State = 'menu' | 'playing' | 'levelup' | 'reward' | 'paused' | 'victory' | 'gameover';
 
 const STEP = BALANCE.simStep;
 const HERO_KEY = 'spawn.hero';
@@ -63,6 +65,8 @@ export class Game {
   private last = performance.now();
   /** Beklenmeyen hata ya da grafik bağlamı kaybı: döngü durur, hata ekranı açık. */
   private halted = false;
+  /** Zafer ekranı gösterilmiş final boss sayısı (yeni zafer → ekran). */
+  private seenVictories = 0;
 
   constructor(root: HTMLElement, assets: GameAssets) {
     this.flags = readFlags(location.search, location.hash);
@@ -257,7 +261,8 @@ export class Game {
   }
 
   private startRun(): void {
-    if (this.world.time > 0) this.world = this.createWorld();
+    if (this.world.time > 0 || this.world.gameOver) this.world = this.createWorld();
+    this.seenVictories = 0;
     if (this.flags.bench > 0) this.world.spawnBurst(this.flags.bench, 6, 45);
     this.lastHp = this.world.player.hp;
     this.acc = 0;
@@ -277,6 +282,10 @@ export class Game {
     const inp = this.input;
     for (const code of ['KeyE', 'Enter']) {
       inp.onKey(code, () => {
+        if (this.state === 'victory') {
+          this.continueVictory();
+          return;
+        }
         const kind = this.world.reward?.kind;
         if (this.state !== 'reward' || (kind !== 'item' && kind !== 'evolution')) return;
         // İlk basış çarkı atlatır, ikincisi ödülü alır.
@@ -328,14 +337,43 @@ export class Game {
     canvas.addEventListener('webglcontextrestored', () => this.contextRestored());
 
     if (this.debug) {
-      inp.onKey('KeyG', () => {
-        this.world.godMode = !this.world.godMode;
-      });
-      inp.onKey('KeyJ', () => this.world.spawnBurst(100));
-      inp.onKey('KeyK', () => this.world.addXp(this.world.xpNext - this.world.xp + 0.01));
-      inp.onKey('KeyL', () => {
-        this.world.time += 60;
-      });
+      // Hileler: koşu rekor ve gümüş saymaz.
+      const cheat = (fn: () => void) => () => {
+        if (this.state !== 'playing') return;
+        this.world.cheated = true;
+        fn();
+      };
+      inp.onKey(
+        'KeyG',
+        cheat(() => {
+          this.world.godMode = !this.world.godMode;
+        }),
+      );
+      inp.onKey(
+        'KeyJ',
+        cheat(() => this.world.spawnBurst(100)),
+      );
+      inp.onKey(
+        'KeyK',
+        cheat(() => this.world.addXp(this.world.xpNext - this.world.xp + 0.01)),
+      );
+      inp.onKey(
+        'KeyL',
+        cheat(() => {
+          this.world.time += 60;
+        }),
+      );
+      // Final boss'u doğur ve öldür (zafer ekranı testi).
+      inp.onKey(
+        'KeyV',
+        cheat(() => {
+          const w = this.world;
+          if (!w.bosses.spawn(w, BOSSES.length - 1)) return;
+          const e = w.enemies;
+          for (let i = 0; i < e.count; i++)
+            if (e.uid[i] === w.bosses.active[w.bosses.active.length - 1].uid) w.damageEnemy(i, 1e12, 0, 0);
+        }),
+      );
     }
   }
 
@@ -345,30 +383,87 @@ export class Game {
     const a = this.audio;
     this.screens.showPause(
       this.world,
-      () => this.resume(),
-      () =>
-        this.screens.showConfirm(
-          'Yeniden başla?',
-          'Bu koşu biter, yeni bir haritada baştan başlarsın.',
-          'Yeniden başla',
-          () => {
-            this.world = this.createWorld();
-            this.startRun();
-          },
-          () => this.pause(),
-        ),
+      {
+        resume: () => this.resume(),
+        restart: () =>
+          this.screens.showConfirm(
+            'Yeniden başla?',
+            'Bu koşu biter, yeni bir haritada baştan başlarsın.',
+            'Yeniden başla',
+            () => {
+              this.world = this.createWorld();
+              this.startRun();
+            },
+            () => this.pause(),
+          ),
+        menu: () =>
+          this.screens.showConfirm(
+            'Ana menüye dön?',
+            'Koşu burada biter; özetini görürsün.',
+            'Koşuyu bitir',
+            () => {
+              this.world.finishRun('quit');
+              this.endRun();
+            },
+            () => this.pause(),
+          ),
+      },
       {
         sfx: a.settings.sfx,
         music: a.settings.music,
         muted: a.settings.muted,
         setVolume: (kind, v) => a.setVolume(kind, v),
-        toggleMute: () => {
-          const m = a.toggleMute();
-          this.hud.setMuted(m);
-          return m;
-        },
+        toggleMute: () => this.toggleMute(),
       },
     );
+  }
+
+  /** Final boss yenildi: zafer ekranı (sim bu sırada adım atmaz). */
+  private showVictory(): void {
+    this.setState('victory');
+    this.input.exitLock();
+    this.audio.duck(2.5);
+    this.audio.play('revealLegend');
+    this.screens.showVictory(
+      summarizeRun(this.world),
+      () => this.continueVictory(),
+      () => {
+        this.world.finishRun('victory');
+        this.endRun();
+      },
+    );
+  }
+
+  private continueVictory(): void {
+    if (this.state !== 'victory') return;
+    this.seenVictories = this.world.victories;
+    this.resume();
+  }
+
+  /** Koşu bitti (ölüm, zafer ya da menüye dönüş): özet ve rekor. */
+  private endRun(): void {
+    const w = this.world;
+    this.setState('gameover');
+    this.input.exitLock();
+    const record = w.cheated ? undefined : submitRun(w);
+    this.screens.showGameOver(
+      summarizeRun(w),
+      {
+        restart: () => {
+          this.world = this.createWorld();
+          this.startRun();
+        },
+        menu: () => this.toMenu(),
+      },
+      { record },
+    );
+  }
+
+  /** Ana menü: yeni (henüz başlamamış) dünya, kahraman seçimi. */
+  private toMenu(): void {
+    this.world = this.createWorld();
+    this.setState('menu');
+    this.showStart();
   }
 
   private resume(): void {
@@ -521,7 +616,13 @@ export class Game {
       const t0 = performance.now();
       this.acc += dt;
       let steps = 0;
-      while (this.acc >= STEP && steps < MAX_STEPS_PER_FRAME && !w.paused) {
+      // Final boss öldüğü adımda durulur: zafer ekranı.
+      while (
+        this.acc >= STEP &&
+        steps < MAX_STEPS_PER_FRAME &&
+        !w.paused &&
+        w.victories === this.seenVictories
+      ) {
         w.step(this.simInput, STEP);
         this.simInput.jump = false;
         this.acc -= STEP;
@@ -538,16 +639,9 @@ export class Game {
       this.lastHp = w.player.hp;
 
       if (w.gameOver) {
-        this.setState('gameover');
-        this.input.exitLock();
-        this.screens.showGameOver(
-          w,
-          () => {
-            this.world = this.createWorld();
-            this.startRun();
-          },
-          submitRun(w),
-        );
+        this.endRun();
+      } else if (w.victories !== this.seenVictories) {
+        this.showVictory();
       } else if (w.reward) {
         this.showReward();
       } else if (w.offer) {
@@ -560,10 +654,12 @@ export class Game {
     this.time += dt;
     const p = this.world.player;
     this.audio.setListener(p.x, p.z, this.renderer.rig.yaw);
-    if (this.state !== 'menu') this.soundEvents.update(this.world, this.audio, dt, this.time, live);
+    // Zafer ekranında ses ve HUD bekler: Kan Ayı duyurusu "Devam"dan sonra gelsin.
+    const hudOn = this.state !== 'menu' && this.state !== 'victory';
+    if (hudOn) this.soundEvents.update(this.world, this.audio, dt, this.time, live);
     this.audio.setMusic(this.musicFor());
-    this.audio.setPaused(this.state === 'paused');
-    if (this.state !== 'menu') this.hud.update(this.world, this.renderer.rig.yaw);
+    this.audio.setPaused(this.state === 'paused' || this.state === 'victory');
+    if (hudOn) this.hud.update(this.world, this.renderer.rig.yaw);
     this.debug?.update(dt, this.world, this.renderer.renderer);
   }
 }

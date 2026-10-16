@@ -45,6 +45,8 @@ export class BossController {
   warned = false;
   lastSpawnAt = Number.NEGATIVE_INFINITY;
   killed = 0;
+  /** Öldürülen boss'ların BOSSES indeksleri (sırayla; koşu özeti ve başarımlar). */
+  readonly killedIndex: number[] = [];
 
   /** Kan Ayı: boss sırası baştan. */
   resetCycle(): void {
@@ -431,6 +433,7 @@ export class BossController {
     const b = this.active[k];
     this.active.splice(k, 1);
     this.killed++;
+    this.killedIndex.push(b.index);
     const x = e.x[i];
     const z = e.z[i];
     const y = world.terrain.heightAt(x, z) + 0.4;

@@ -12,6 +12,8 @@ export class Blasts {
   readonly knockback: Float32Array;
   readonly timer: Float32Array;
   readonly total: Float32Array;
+  /** Hasar kaynağı: silah yuvası (−1 = eşya patlaması). */
+  readonly src: Int8Array;
 
   constructor(capacity: number) {
     this.capacity = capacity;
@@ -23,9 +25,18 @@ export class Blasts {
     this.knockback = f();
     this.timer = f();
     this.total = f();
+    this.src = new Int8Array(capacity);
   }
 
-  add(x: number, z: number, radius: number, damage: number, knockback: number, delay: number): void {
+  add(
+    x: number,
+    z: number,
+    radius: number,
+    damage: number,
+    knockback: number,
+    delay: number,
+    src = -1,
+  ): void {
     if (this.count >= this.capacity) return;
     const i = this.count++;
     this.x[i] = x;
@@ -35,6 +46,7 @@ export class Blasts {
     this.knockback[i] = knockback;
     this.timer[i] = delay;
     this.total[i] = delay;
+    this.src[i] = src;
   }
 
   removeAt(i: number): void {
@@ -47,5 +59,6 @@ export class Blasts {
     this.knockback[i] = this.knockback[last];
     this.timer[i] = this.timer[last];
     this.total[i] = this.total[last];
+    this.src[i] = this.src[last];
   }
 }

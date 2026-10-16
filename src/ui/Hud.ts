@@ -224,6 +224,12 @@ export class Hud {
       this.annCursor = 0;
       this.bannerQueue.length = 0;
     }
+    if (world.gameOver) {
+      // Koşu bitti (ör. zaferden sonra "Koşuyu bitir"): bekleyen Kan Ayı duyurusu gösterilmez.
+      this.annCursor = world.announceFx.written;
+      this.bannerQueue.length = 0;
+      return;
+    }
     this.annCursor = world.announceFx.drain(this.annCursor, (d, o) => {
       const a = announcement(d[o], d[o + 1], d[o + 2], world.cycle);
       if (!a) return;

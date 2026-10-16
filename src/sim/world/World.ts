@@ -67,6 +67,7 @@ import { EventRing } from './EventRing';
 import { ALTAR as ALTAR_KIND, CAULDRON as CAULDRON_KIND, CHEST, Interactables, VASE } from './Interactables';
 import { Landmarks } from './Landmarks';
 import { Obstacles } from './Obstacles';
+import { type RunOutcome, RunStats } from './RunStats';
 import { TORCH_FX, Torches } from './Torches';
 
 export interface WorldOptions {
@@ -233,6 +234,19 @@ export class World {
   eliteKills = 0;
   chestPrice: number = BALANCE.loot.chestBasePrice;
   chestsOpened = 0;
+  /** Koşu istatistikleri (silah başına hasar, öldürme…). */
+  readonly run = new RunStats();
+  /**
+   * Şu an hasar veren silah yuvası (−1 = diğer: eşya, diken, kazan). Silah güncellemesi, mermi ve
+   * patlama işlenirken ayarlanır; her kullanımdan sonra −1'e döner.
+   */
+  dmgSrc = -1;
+  /** Yenilen final boss sayısı (Kan Ayı'na geçiş sayısı). */
+  victories = 0;
+  /** Koşunun bitiş biçimi (null = sürüyor). */
+  outcome: RunOutcome | null = null;
+  /** Hata ayıklama hilesi kullanıldı (rekor ve gümüş sayılmaz). */
+  cheated = false;
   /** Sandık/sunak ödülü: doluysa oyun durur, oyuncu alır. */
   reward: Reward | null = null;
   /** Sıradaki ödüller (ör. boss sandığında önce evrim, sonra eşyalar). */
@@ -299,6 +313,13 @@ export class World {
     this.weapons.push(createWeapon(WEAPONS[WEAPON_INDEX[opts.startWeapon ?? 'magicBolt']]));
   }
 
+  /** Koşuyu bitirir (zaferle ya da menüye dönerek); ölüm sim içinde olur. */
+  finishRun(kind: RunOutcome): void {
+    if (this.gameOver) return;
+    this.outcome = kind;
+    this.gameOver = true;
+  }
+
   get paused(): boolean {
     return this.gameOver || this.offer !== null || this.reward !== null;
   }
@@ -317,7 +338,11 @@ export class World {
     const e = this.enemies;
     this.enemyGrid.rebuild(e.count, e.x, e.z);
 
-    for (const w of this.weapons) updateWeapon(this, w, dt);
+    for (let k = 0; k < this.weapons.length; k++) {
+      this.dmgSrc = k;
+      updateWeapon(this, this.weapons[k], dt);
+    }
+    this.dmgSrc = -1;
     this.updateProjectiles(dt);
     this.updateBlasts(dt);
     this.updateEnemies(dt);
@@ -346,6 +371,7 @@ export class World {
       else if (this.itemCounts[ITEM_INDEX.phoenix] > 0) this.revive();
       else {
         p.hp = 0;
+        this.outcome = 'death';
         this.gameOver = true;
       }
     }
@@ -402,6 +428,7 @@ export class World {
     const p = this.player;
     switch (opt.kind) {
       case 'weaponNew':
+        this.run.weaponSince[this.weapons.length] = this.time;
         this.weapons.push(createWeapon(WEAPONS[opt.weapon]));
         break;
       case 'weaponLevel': {
@@ -426,6 +453,7 @@ export class World {
         break;
       case 'gold':
         this.gold += opt.amount;
+        this.run.goldEarned += opt.amount;
         break;
       case 'essence':
         this.stats.addMult('damage', ESSENCE_DAMAGE * rarityMult(opt.rarity));
@@ -474,6 +502,7 @@ export class World {
     w.def = evo.def;
     w.stats = computeWeaponStats(evo.def, w.applied);
     w.timer = 0;
+    this.run.evolutions++;
     const p = this.player;
     this.pulseFx.push(p.x, p.y, p.z, 6, PULSE_HOLY);
   }
@@ -564,7 +593,7 @@ export class World {
     p.hp = p.maxHp * ITEM_FX.phoenixHp;
     p.invuln = ITEM_FX.phoenixInvuln;
     this.revivedAt = this.time;
-    this.addBlast(p.x, p.z, ITEM_FX.phoenixRadius, ITEM_FX.phoenixDamage, 12, 0);
+    this.addBlast(p.x, p.z, ITEM_FX.phoenixRadius, ITEM_FX.phoenixDamage, 12, 0, -1);
     this.pulseFx.push(p.x, p.y, p.z, ITEM_FX.phoenixRadius * 1.6, PULSE_PHOENIX);
   }
 
@@ -580,6 +609,7 @@ export class World {
    * 8:00'dan hızlı tekrar, daha güçlü düşmanlar, "Kanlı" boss'lar); oyun oyuncu ölene kadar sürer.
    */
   startBloodMoon(): void {
+    this.victories++;
     this.cycle++;
     this.cycleStart = this.time;
     this.bloodMoonAt = this.time;
@@ -622,7 +652,9 @@ export class World {
       );
       return 0;
     }
-    return this.player.takeDamage(amount * this.mods.damageTaken, this.stats.get('armor'));
+    const dealt = this.player.takeDamage(amount * this.mods.damageTaken, this.stats.get('armor'));
+    this.run.damageTaken += dealt;
+    return dealt;
   }
 
   dropPickup(kind: number, x: number, y: number, z: number, value: number): void {
@@ -666,9 +698,12 @@ export class World {
   private collectPickup(kind: number, value: number): void {
     switch (kind) {
       case PICKUP_GOLD:
-      case PICKUP_BAG:
-        this.gold += value * this.stats.get('goldGain');
+      case PICKUP_BAG: {
+        const g = value * this.stats.get('goldGain');
+        this.gold += g;
+        this.run.goldEarned += g;
         break;
+      }
       case PICKUP_HEAL:
         this.heal(BALANCE.loot.healAmount);
         break;
@@ -1086,6 +1121,7 @@ export class World {
     e.kx[i] += kx * k;
     e.kz[i] += kz * k;
     this.damageDealt += dmg;
+    this.run.addDamage(this.dmgSrc, dmg);
     this.hitFx.push(e.x[i], e.y[i] + e.hover[i] + 1, e.z[i], dmg, crit ? 1 : 0);
     if (e.hp[i] <= 0) {
       this.killEnemy(i);
@@ -1102,6 +1138,7 @@ export class World {
     const e = this.enemies;
     e.dead[i] = 1;
     this.kills++;
+    this.run.addKill(this.dmgSrc);
     const x = e.x[i];
     const z = e.z[i];
     const gy = this.terrain.heightAt(x, z) + 0.35;
@@ -1130,7 +1167,7 @@ export class World {
     const skull = this.itemCounts[ITEM_INDEX.skull];
     if (skull > 0 && this.rng.chance(ITEM_FX.skullChance * skull)) {
       // Patlamayı kuyruğa al (zincirleme patlamalar özyineleme yapmasın).
-      this.addBlast(x, z, ITEM_FX.skullRadius, ITEM_FX.skullDamage, 3, 0.05);
+      this.addBlast(x, z, ITEM_FX.skullRadius, ITEM_FX.skullDamage, 3, 0.05, -1);
     }
     if (e.flags[i] & EF_BOSS && this.bosses.onDeath(this, i)?.final) this.startBloodMoon();
     this.deathFx.push(x, e.y[i] + e.hover[i], z, e.type[i], yaw, e.scale[i]);
@@ -1349,11 +1386,20 @@ export class World {
     pr.knockback[i] = o.knockback;
     pr.homing[i] = o.homing ?? 0;
     pr.flags[i] = o.flags ?? 0;
+    pr.src[i] = this.dmgSrc;
   }
 
-  /** Gecikmeli patlama (Havan). */
-  addBlast(x: number, z: number, radius: number, damage: number, knockback: number, delay: number): void {
-    this.blasts.add(x, z, radius, damage, knockback, delay);
+  /** Gecikmeli patlama (Havan; eşyalar `src = −1` verir). */
+  addBlast(
+    x: number,
+    z: number,
+    radius: number,
+    damage: number,
+    knockback: number,
+    delay: number,
+    src = this.dmgSrc,
+  ): void {
+    this.blasts.add(x, z, radius, damage, knockback, delay, src);
   }
 
   private updateBlasts(dt: number): void {
@@ -1362,7 +1408,9 @@ export class World {
       b.timer[i] -= dt;
       if (b.timer[i] > 0) continue;
       const y = this.terrain.heightAt(b.x[i], b.z[i]);
+      this.dmgSrc = b.src[i];
       this.damageInRadius(b.x[i], y + 0.5, b.z[i], b.radius[i], b.damage[i], b.knockback[i]);
+      this.dmgSrc = -1;
       this.blastFx.push(b.x[i], y, b.z[i], b.radius[i]);
       b.removeAt(i);
     }
@@ -1521,7 +1569,9 @@ export class World {
         pr.rememberHit(i, e.uid[j]);
         const sp = Math.hypot(pr.vx[i], pr.vz[i]) || 1;
         const kb = pr.knockback[i];
+        this.dmgSrc = pr.src[i];
         this.damageEnemy(j, pr.damage[i], (pr.vx[i] / sp) * kb, (pr.vz[i] / sp) * kb);
+        this.dmgSrc = -1;
         pr.pierceLeft[i]--;
         if (pr.pierceLeft[i] === 0) {
           pr.dead[i] = 1;

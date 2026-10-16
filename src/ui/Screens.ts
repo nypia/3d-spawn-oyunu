@@ -6,11 +6,13 @@ import { TOME_INDEX, TOMES } from '../data/tomes';
 import { WEAPON_INDEX, WEAPONS, weaponMaxLevel } from '../data/weapons';
 import { RARITIES } from '../sim/progression/Rarity';
 import type { SlotUsage, UpgradeView } from '../sim/progression/Upgrades';
+import type { RunSummary } from '../sim/world/RunStats';
 import type { World } from '../sim/world/World';
 import { ChestReel, type ChestView, type RewardSounds } from './ChestReel';
 import { formatTime, h } from './dom';
 import type { RunRecord } from './records';
 import { revealBurst } from './rewardFx';
+import { buildIcons, buildPanel, statList, summaryRows, weaponTable } from './runSummary';
 
 export interface EvolutionView {
   fromIcon: string;
@@ -50,6 +52,24 @@ export interface LevelUpActions {
   banish: (i: number) => void;
   reroll: () => void;
   skip: () => void;
+}
+
+export interface PauseActions {
+  resume: () => void;
+  restart: () => void;
+  menu: () => void;
+}
+
+export interface EndActions {
+  restart: () => void;
+  menu: () => void;
+}
+
+/** Oyun sonunda kalıcı ilerleme satırı (gümüş, açılanlar). */
+export interface EndExtras {
+  record?: { best: RunRecord; isNew: boolean };
+  /** Ek satırlar (ör. "+73 🥈 gümüş"). */
+  lines?: (Node | string)[];
 }
 
 export interface LevelUpCharges {
@@ -313,24 +333,67 @@ export class Screens {
     );
   }
 
-  showPause(world: World, onResume: () => void, onRestart: () => void, audio?: AudioControls): void {
-    const resume = h('button.btn.btn-primary', {}, 'DEVAM');
-    resume.addEventListener('click', onResume);
+  showPause(world: World, actions: PauseActions, audio?: AudioControls): void {
+    const resume = h('button.btn.btn-primary', { 'data-testid': 'resume' }, 'DEVAM');
+    resume.addEventListener('click', actions.resume);
     const guide = h('button.btn', { 'data-testid': 'guide' }, '📖 Rehber');
-    guide.addEventListener('click', () =>
-      this.showGuide(world, () => this.showPause(world, onResume, onRestart, audio)),
-    );
+    guide.addEventListener('click', () => this.showGuide(world, () => this.showPause(world, actions, audio)));
     const restart = h('button.btn', { 'data-testid': 'restart-run' }, 'Yeniden Başla');
-    restart.addEventListener('click', onRestart);
+    restart.addEventListener('click', actions.restart);
+    const menu = h('button.btn', { 'data-testid': 'to-menu' }, '🏠 Ana Menü');
+    menu.addEventListener('click', actions.menu);
     this.show(
       h(
-        'div.panel',
+        'div.panel.pause',
         {},
         h('h2', {}, 'Duraklatıldı'),
+        buildPanel(world),
         audio ? audioSettings(audio) : '',
-        h('div.buttons', {}, resume, guide, restart),
+        h('div.buttons', {}, resume, guide, restart, menu),
       ),
     );
+  }
+
+  /**
+   * Final boss yenildi: koşunun özeti ve seçim. "Kan Ayı'na devam" varsayılan (Enter/E), "Koşuyu
+   * bitir" koşuyu zaferle kapatır.
+   */
+  showVictory(summary: RunSummary, onContinue: () => void, onFinish: () => void, note = ''): void {
+    const go = h(
+      'button.btn.btn-primary',
+      { 'data-testid': 'victory-continue' },
+      "🌕 Kan Ayı'na devam",
+      h('span.keys-only', {}, ' (E)'),
+    );
+    go.addEventListener('click', onContinue);
+    const finish = h('button.btn', { 'data-testid': 'victory-finish' }, '🏁 Koşuyu bitir');
+    finish.addEventListener('click', onFinish);
+    const first = summary.victories <= 1;
+    const host = h(
+      'div.victory-stage',
+      {},
+      h('p.victory-sub', {}, first ? 'Kemik Kral yenildi!' : `Kan Ayı ${summary.cycle - 1} yenildi!`),
+    );
+    this.show(
+      h(
+        'div.panel.victory',
+        { 'data-testid': 'victory' },
+        h('h2.victory-title', {}, first ? 'ZAFER!' : 'KANLI ZAFER!'),
+        host,
+        // "Ulaşılan" satırı yok: Kan Ayı dünyada zaten başladı, ama oyuncu henüz seçmedi.
+        statList(summaryRows(summary).filter(([k]) => k !== 'Ulaşılan' && k !== 'Altın')),
+        weaponTable(summary),
+        h(
+          'p.lead',
+          {},
+          'Devam edersen dünya kızıl geceye döner: düşmanlar güçlenir, boss\'lar "Kanlı" hâlleriyle gelir.',
+        ),
+        note ? h('p.note', {}, note) : '',
+        h('div.buttons', {}, go, finish),
+      ),
+    );
+    revealBurst(host, this.el, 3, 'ZAFER!');
+    go.focus();
   }
 
   /** Rehber: eşyalar (nadirliğe göre gruplu) ve evrimler; sahip olunanlar vurgulu. */
@@ -360,24 +423,34 @@ export class Screens {
     this.backFn = onBack;
   }
 
-  showGameOver(world: World, onRestart: () => void, record?: { best: RunRecord; isNew: boolean }): void {
+  /** Koşu sonu: sonuca göre başlık, özet, silah başına hasar, rekor ve kalıcı ilerleme. */
+  showGameOver(summary: RunSummary, actions: EndActions, extras: EndExtras = {}): void {
     const again = h('button.btn.btn-primary', { 'data-testid': 'restart' }, 'TEKRAR OYNA');
-    again.addEventListener('click', onRestart);
-    const rows: [string, string][] = [
-      ['Süre', formatTime(world.time)],
-      ['Ulaşılan', world.cycle > 1 ? `🌕 Kan Ayı ${world.cycle}` : '☀️ Gün 1'],
-      ['Boss', String(world.bosses.killed)],
-      ['Seviye', String(world.level)],
-      ['Öldürülen', String(world.kills)],
-      ['Toplam hasar', Math.round(world.damageDealt).toLocaleString('tr-TR')],
-    ];
+    again.addEventListener('click', actions.restart);
+    const menu = h('button.btn', { 'data-testid': 'end-menu' }, '🏠 Ana Menü');
+    menu.addEventListener('click', actions.menu);
+    const rows = summaryRows(summary);
+    const record = extras.record;
     if (record && !record.isNew) {
       const b = record.best;
       rows.push(['En iyi', `${formatTime(b.time)}${b.cycle > 1 ? ` · Kan Ayı ${b.cycle}` : ''}`]);
     }
-    const stats = h('dl.stats', {}, ...rows.flatMap(([k, v]) => [h('dt', {}, k), h('dd', {}, v)]));
     const badge = record?.isNew ? h('p.record-badge', { 'data-testid': 'record' }, '🏆 Yeni rekor!') : '';
-    this.show(h('div.panel.gameover', {}, h('h2', {}, 'Öldün!'), badge, stats, again));
+    const title =
+      summary.outcome === 'victory' ? 'Zafer!' : summary.outcome === 'quit' ? 'Koşu bırakıldı' : 'Öldün!';
+    this.show(
+      h(
+        `div.panel.gameover.${summary.outcome}`,
+        { 'data-testid': 'gameover' },
+        h('h2', {}, title),
+        badge,
+        ...(extras.lines ?? []).map((l) => h('p.end-line', {}, l)),
+        statList(rows),
+        weaponTable(summary),
+        buildIcons(summary),
+        h('div.buttons', {}, again, menu),
+      ),
+    );
   }
 }
 

@@ -144,7 +144,11 @@ export class Landmarks {
     it.charge[k] = 0;
     it.level[k] = Math.min(250, it.level[k] + 1);
     it.cooldown[k] = CAULDRON.cooldown;
+    // Kazan patlaması "diğer" hasar sayılır (bir silah öldürürken tetiklenmiş olsa da).
+    const src = w.dmgSrc;
+    w.dmgSrc = -1;
     w.damageInRadius(x, y + 1, z, CAULDRON.eruptRadius, CAULDRON.eruptDamage, CAULDRON.eruptKnock);
+    w.dmgSrc = src;
     w.breakFx.push(x, y, z, CAULDRON_KIND, 0);
     const a = w.rng.range(0, Math.PI * 2);
     w.interactables.addRewardChest(x + Math.sin(a) * 2.6, z + Math.cos(a) * 2.6, a, CHEST_CAULDRON);

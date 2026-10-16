@@ -32,6 +32,8 @@ export class ProjectilePool {
   /** Görsel tür (render hangi mesh'i kullanacak). */
   readonly kind: Uint8Array;
   readonly flags: Uint8Array;
+  /** Hasar kaynağı: atan silahın yuvası (−1 = diğer). */
+  readonly src: Int8Array;
   readonly dead: Uint8Array;
   readonly hitCount: Uint8Array;
   readonly hitUids: Int32Array;
@@ -54,6 +56,7 @@ export class ProjectilePool {
     this.pierceLeft = new Uint8Array(capacity);
     this.kind = new Uint8Array(capacity);
     this.flags = new Uint8Array(capacity);
+    this.src = new Int8Array(capacity);
     this.dead = new Uint8Array(capacity);
     this.hitCount = new Uint8Array(capacity);
     this.hitUids = new Int32Array(capacity * HIT_SLOTS);
@@ -65,6 +68,7 @@ export class ProjectilePool {
     this.dead[i] = 0;
     this.hitCount[i] = 0;
     this.flags[i] = 0;
+    this.src[i] = -1;
     return i;
   }
 
@@ -88,7 +92,7 @@ export class ProjectilePool {
     }
   }
 
-  private removeAt(i: number): void {
+  removeAt(i: number): void {
     const last = --this.count;
     if (i === last) return;
     this.x[i] = this.x[last];
@@ -106,6 +110,7 @@ export class ProjectilePool {
     this.pierceLeft[i] = this.pierceLeft[last];
     this.kind[i] = this.kind[last];
     this.flags[i] = this.flags[last];
+    this.src[i] = this.src[last];
     this.dead[i] = this.dead[last];
     this.hitCount[i] = this.hitCount[last];
     this.hitUids.copyWithin(i * HIT_SLOTS, last * HIT_SLOTS, (last + 1) * HIT_SLOTS);

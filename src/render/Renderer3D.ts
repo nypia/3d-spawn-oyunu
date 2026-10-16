@@ -289,7 +289,7 @@ export class Renderer3D {
     this.sun.target.position.set(p.x, p.y, p.z);
 
     const heroDt = live || cinematic || world.gameOver ? dt : 0;
-    this.hero.update(p, world.terrain, heroDt, this.time, world.gameOver);
+    this.hero.update(p, world.terrain, heroDt, this.time, world.outcome === 'death');
     this.worldView.update(world, this.time, dt);
     this.effects.begin();
     this.weaponFx.update(world, this.time, dt, this.orbHalo);

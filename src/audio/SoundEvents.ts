@@ -238,7 +238,8 @@ export class SoundEvents {
     this.hp = p.hp;
     if (w.level > this.level) a.play('levelUp');
     this.level = w.level;
-    if (w.gameOver && !this.wasOver) a.play('gameOver');
+    if (w.gameOver && !this.wasOver && w.outcome !== 'quit')
+      a.play(w.outcome === 'victory' ? 'bossDead' : 'gameOver');
     this.wasOver = w.gameOver;
   }
 }
