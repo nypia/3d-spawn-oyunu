@@ -36,6 +36,7 @@ export class TouchControls {
   slideHeld = false;
   cameraDragging = false;
   onPause: () => void = () => {};
+  onSound: () => void = () => {};
 
   private jumpQueued = false;
   private lookX = 0;
@@ -49,6 +50,12 @@ export class TouchControls {
   private lastY = 0;
   private readonly base = h('div.stick-base', {}, h('div.stick-knob'));
   private readonly hint = h('div.touch-hint', {}, 'Sol: sürükle → koş · Sağ: sürükle → kamera');
+  /** HUD'daki 🔊 dokunmatik katmanın altında kalır: burada kendi butonu var. */
+  private readonly sound = h(
+    'button.touch-pause.touch-sound',
+    { 'data-testid': 'touch-sound', 'aria-label': 'Sesi kapat/aç' },
+    '🔊',
+  );
 
   constructor(parent: HTMLElement, startActive: boolean) {
     const jump = h(
@@ -70,6 +77,7 @@ export class TouchControls {
       slide,
       jump,
       pause,
+      this.sound,
     );
     parent.append(this.el);
 
@@ -102,6 +110,7 @@ export class TouchControls {
       },
     );
     press(pause, () => this.onPause());
+    press(this.sound, () => this.onSound());
 
     this.el.addEventListener('pointerdown', (e) => this.onDown(e));
     this.el.addEventListener('pointermove', (e) => this.onMove(e));
@@ -118,6 +127,11 @@ export class TouchControls {
     );
     if (startActive) this.activate();
     this.setVisible(false);
+  }
+
+  setMuted(muted: boolean): void {
+    this.sound.textContent = muted ? '🔇' : '🔊';
+    this.sound.classList.toggle('muted', muted);
   }
 
   activate(): void {

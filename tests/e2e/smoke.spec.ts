@@ -84,15 +84,31 @@ test('oyun açılır, oynanır ve seviye atlama çalışır', async ({ page }, t
   await page.getByTestId('card-0').click();
   await expect.poll(async () => (await gameState(page)).state).toBe('playing');
 
-  // Esc → duraklat → rehber → geri → Esc → devam
+  // Koşarken Esc → duraklat: ekran açıkken ayak sesi (ya da başka efekt) çalmaz.
+  await page.keyboard.down('KeyW');
+  const t0 = await simTime();
+  await expect.poll(simTime, { timeout: 20_000 }).toBeGreaterThan(t0 + 0.5);
   await page.keyboard.press('Escape');
+  await page.keyboard.up('KeyW');
   await expect.poll(async () => (await gameState(page)).state).toBe('paused');
+  const playedPaused = (await audio()).played;
+  await page.waitForTimeout(1500);
+  expect((await audio()).played).toBe(playedPaused);
+
+  // Rehber → sekme → Esc rehberden duraklatmaya döner (oyunu sürdürmez).
   await page.getByTestId('guide').click();
   await expect(page.getByTestId('guide-panel')).toContainText('Anka Tüyü');
   await page.screenshot({ path: testInfo.outputPath('4-guide.png') });
   await page.getByTestId('guide-evolutions').click();
   await expect(page.getByTestId('guide-panel')).toContainText('Kutsal Asa');
-  await page.getByTestId('guide-back').click();
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('guide')).toBeVisible();
+  expect((await gameState(page)).state).toBe('paused');
+
+  // Yeniden başla onay ister; vazgeçince duraklatmaya dönülür.
+  await page.getByTestId('restart-run').click();
+  await expect(page.getByTestId('confirm-yes')).toBeVisible();
+  await page.getByTestId('confirm-no').click();
   await expect(page.getByTestId('guide')).toBeVisible();
   await page.keyboard.press('Escape');
   await expect.poll(async () => (await gameState(page)).state).toBe('playing');

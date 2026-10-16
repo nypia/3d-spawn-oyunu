@@ -1,7 +1,11 @@
-/** Uyarı alanı türleri: daire, çizgi (x,z → x2,z2), havada uçan kaya (x2,z2'den x,z'ye düşer). */
+/**
+ * Uyarı alanı türleri: daire, çizgi (x,z → x2,z2), havada uçan kaya (x2,z2'den x,z'ye düşer) ve
+ * gökten düşen balçık damlası (görünüşü dışında kaya gibi).
+ */
 export const HZ_CIRCLE = 0;
 export const HZ_LINE = 1;
 export const HZ_BOULDER = 2;
+export const HZ_GLOB = 3;
 
 /** Yalnızca görsel (ör. atılma yolu): hasar vermez. */
 export const HZF_VISUAL = 1;

@@ -20,6 +20,8 @@ function loadingScreen(app: HTMLElement): {
   message: (text: string) => void;
   remove: () => void;
 } {
+  // index.html'deki statik açılış yazısı: betik geldi, yerini ilerleme çubuğu alır.
+  for (const b of app.querySelectorAll('.boot-loading')) b.remove();
   const el = document.createElement('div');
   el.className = 'loading';
   el.innerHTML =
@@ -49,6 +51,13 @@ async function boot(app: HTMLElement): Promise<void> {
     // Shader derlemesi açılış ekranının arkasında; en fazla birkaç saniye beklenir.
     await Promise.race([game.warmUp(), new Promise((r) => setTimeout(r, 5000))]);
     loading.remove();
+    // Olay dinleyicilerinde (tuş, buton) çıkan hatalar da donmak yerine hata ekranı açar.
+    window.addEventListener('error', (e) => {
+      // Tarayıcı uyarıları (ResizeObserver) ve başka kaynaklı "Script error." oyunu durdurmaz.
+      if (!(e.error instanceof Error) || /ResizeObserver/.test(e.message)) return;
+      game.crash(e.error);
+    });
+    window.addEventListener('unhandledrejection', (e) => console.warn('yakalanmamış söz:', e.reason));
     game.run();
   } catch (err) {
     loading.remove();

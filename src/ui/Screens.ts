@@ -63,6 +63,8 @@ export class Screens {
   private readonly el: HTMLDivElement;
   /** Açık sandık çarkı (atlatma için). */
   private chest: ChestReel | null = null;
+  /** Alt ekranın (rehber, onay) Esc ile döneceği yer. */
+  private backFn: (() => void) | null = null;
 
   constructor(parent: HTMLElement) {
     this.el = h('div.overlay');
@@ -83,9 +85,48 @@ export class Screens {
 
   private show(...children: Node[]): void {
     this.endChest();
+    this.backFn = null;
     this.el.className = 'overlay';
     this.el.replaceChildren(...children);
     this.el.style.display = '';
+  }
+
+  /** Esc: açık alt ekrandan geri döner (döndüyse true). */
+  back(): boolean {
+    const fn = this.backFn;
+    if (!fn) return false;
+    fn();
+    return true;
+  }
+
+  /** Evet/hayır onayı (Esc = hayır). */
+  showConfirm(title: string, text: string, yes: string, onYes: () => void, onNo: () => void): void {
+    const ok = h('button.btn.btn-danger', { 'data-testid': 'confirm-yes' }, yes);
+    ok.addEventListener('click', onYes);
+    const cancel = h('button.btn.btn-primary', { 'data-testid': 'confirm-no' }, 'Vazgeç');
+    cancel.addEventListener('click', onNo);
+    this.show(
+      h('div.panel.confirm', {}, h('h2', {}, title), h('p.lead', {}, text), h('div.buttons', {}, cancel, ok)),
+    );
+    this.backFn = onNo;
+  }
+
+  /** Beklenmeyen hata ya da grafik bağlamı kaybı: oyun donmak yerine burada durur. */
+  showError(title: string, detail: string, actions: { label: string; run: () => void }[]): void {
+    const buttons = actions.map((a, i) => {
+      const b = h(`button.btn${i === 0 ? '.btn-primary' : ''}`, {}, a.label);
+      b.addEventListener('click', a.run);
+      return b;
+    });
+    this.show(
+      h(
+        'div.panel.error-panel',
+        { 'data-testid': 'error' },
+        h('h2', {}, title),
+        detail ? h('p.note.error-detail', {}, detail) : '',
+        h('div.buttons', {}, ...buttons),
+      ),
+    );
   }
 
   showStart(onPlay: () => void, heroes?: HeroPicker): void {
@@ -162,7 +203,7 @@ export class Screens {
     });
     const reroll = h(
       'button.btn.btn-small',
-      { 'data-testid': 'reroll' },
+      { 'data-testid': 'reroll', 'data-sfx': 'none' },
       `🎲 Yenile (${charges.rerolls})`,
       h('span.keys-only', {}, ' R'),
     );
@@ -279,7 +320,7 @@ export class Screens {
     guide.addEventListener('click', () =>
       this.showGuide(world, () => this.showPause(world, onResume, onRestart, audio)),
     );
-    const restart = h('button.btn', {}, 'Yeniden Başla');
+    const restart = h('button.btn', { 'data-testid': 'restart-run' }, 'Yeniden Başla');
     restart.addEventListener('click', onRestart);
     this.show(
       h(
@@ -316,6 +357,7 @@ export class Screens {
         h('div.buttons', {}, back),
       ),
     );
+    this.backFn = onBack;
   }
 
   showGameOver(world: World, onRestart: () => void, record?: { best: RunRecord; isNew: boolean }): void {

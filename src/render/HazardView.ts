@@ -5,6 +5,7 @@ import {
   DoubleSide,
   DynamicDrawUsage,
   Group,
+  IcosahedronGeometry,
   InstancedMesh,
   Matrix4,
   Mesh,
@@ -14,7 +15,7 @@ import {
   Vector3,
 } from 'three';
 import { BOSSES } from '../data/bosses';
-import { HZ_BOULDER, HZ_LINE, HZF_VISUAL } from '../sim/combat/Hazards';
+import { HZ_BOULDER, HZ_GLOB, HZ_LINE, HZF_VISUAL } from '../sim/combat/Hazards';
 import type { Heightmap } from '../sim/terrain/Heightmap';
 import type { World } from '../sim/world/World';
 
@@ -40,6 +41,8 @@ export class HazardView {
   private readonly colors = new Float32Array(MAX_VERTS * 4);
   private readonly index = new Uint32Array(MAX_INDEX);
   private readonly rocks: InstancedMesh;
+  /** Balçık Kral'ın yağmuru: yarı saydam yeşil damlalar. */
+  private readonly globs: InstancedMesh;
   private nv = 0;
   private ni = 0;
 
@@ -63,7 +66,20 @@ export class HazardView {
     this.rocks.instanceMatrix.setUsage(DynamicDrawUsage);
     this.rocks.frustumCulled = false;
     this.rocks.count = 0;
-    this.root.add(mesh, this.rocks);
+    this.globs = new InstancedMesh(
+      new IcosahedronGeometry(1, 1),
+      new MeshLambertMaterial({
+        color: 0x6fd35a,
+        emissive: 0x1f6a14,
+        transparent: true,
+        opacity: 0.82,
+      }),
+      48,
+    );
+    this.globs.instanceMatrix.setUsage(DynamicDrawUsage);
+    this.globs.frustumCulled = false;
+    this.globs.count = 0;
+    this.root.add(mesh, this.rocks, this.globs);
   }
 
   private vert(x: number, y: number, z: number, r: number, g: number, b: number, a: number): number {
@@ -184,6 +200,7 @@ export class HazardView {
     const t = world.terrain;
     const h = world.hazards;
     let nr = 0;
+    let ng = 0;
     const blink = 0.75 + Math.sin(time * 18) * 0.25;
     for (let i = 0; i < h.count; i++) {
       const u = 1 - h.delay[i] / h.total[i];
@@ -217,6 +234,17 @@ export class HazardView {
         scl.setScalar(Math.max(0.4, r * 0.38));
         m4.compose(pos, quat, scl);
         this.rocks.setMatrixAt(nr++, m4);
+      } else if (h.kind[i] === HZ_GLOB && ng < this.globs.instanceMatrix.count) {
+        // Damla gökten düşer; düşerken uzar, yere yaklaşınca yassılır.
+        const ground = t.heightAt(h.x[i], h.z[i]);
+        const fall = 1 - u;
+        const s = Math.max(0.35, r * 0.32);
+        pos.set(h.x[i], ground + fall * fall * 16 + s * 0.6, h.z[i]);
+        quat.identity();
+        const stretch = 1 + Math.min(0.6, fall * 0.8);
+        scl.set(s / Math.sqrt(stretch), s * stretch, s / Math.sqrt(stretch));
+        m4.compose(pos, quat, scl);
+        this.globs.setMatrixAt(ng++, m4);
       }
     }
     // Boss'ların altında dönen halka (kendi renginde).
@@ -235,6 +263,8 @@ export class HazardView {
     }
     this.rocks.count = nr;
     this.rocks.instanceMatrix.needsUpdate = true;
+    this.globs.count = ng;
+    this.globs.instanceMatrix.needsUpdate = true;
     const g = this.geo;
     (g.getAttribute('position') as BufferAttribute).clearUpdateRanges();
     (g.getAttribute('position') as BufferAttribute).addUpdateRange(0, this.nv * 3);

@@ -45,13 +45,17 @@ export class CulledInstances {
     this.lastX = x;
     this.lastZ = z;
     const out = this.mesh.instanceMatrix.array as Float32Array;
+    const src = this.matrices;
     const r2 = this.radius * this.radius;
     let k = 0;
     for (let i = 0; i < this.n; i++) {
       const dx = this.xz[i * 2] - x;
       const dz = this.xz[i * 2 + 1] - z;
       if (dx * dx + dz * dz > r2) continue;
-      out.set(this.matrices.subarray(i * 16, i * 16 + 16), k * 16);
+      // Elle kopya: örnek başına subarray görünümü binlerce küçük nesne üretip çöp toplamayı tetikliyordu.
+      const o = k * 16;
+      const s = i * 16;
+      for (let j = 0; j < 16; j++) out[o + j] = src[s + j];
       k++;
     }
     this.mesh.count = k;

@@ -1,7 +1,7 @@
 import { Color, Group, IcosahedronGeometry, MeshLambertMaterial, NormalBlending, type Vector3 } from 'three';
 import { ENEMIES } from '../../data/enemies';
 import { GEM_TIERS, gemTier } from '../../data/gems';
-import { HZ_BOULDER, HZ_LINE } from '../../sim/combat/Hazards';
+import { HZ_BOULDER, HZ_GLOB, HZ_LINE } from '../../sim/combat/Hazards';
 import { PROJ_BOLT } from '../../sim/combat/ProjectilePool';
 import {
   PICKUP_BAG,
@@ -159,10 +159,10 @@ export class Effects {
     this.halos.push(x, y, z, size, c1.r, c1.g, c1.b, 1);
   }
 
-  update(world: World, dt: number, time: number, camera: Vector3): void {
+  update(world: World, dt: number, time: number, camera: Vector3, live = true): void {
     this.drainEvents(world);
     this.levelUp(world);
-    this.heroDust(world, dt);
+    if (live) this.heroDust(world, dt);
     this.torches(world, dt, time);
     this.projectiles(world);
     this.pickupHalos(world, time);
@@ -464,6 +464,13 @@ export class Effects {
           this.sparks(px, py + 0.2, pz, 2, 0xff5a3a, 2.4, 5, 0.14, 0.4);
         }
         this.puff((x + x2) / 2, y + 0.3, (z + z2) / 2, 5, 0x6a5f52, 0.55, len * 0.3, 0.9, 2, 1.2);
+        return;
+      }
+      if (kind === HZ_GLOB) {
+        // Balçık damlası: yeşil sıçrama, ateş yok.
+        this.flash(x, y + 0.5, z, r * 1.2, 0x8aff6a, 1.6, 0.16);
+        this.sparks(x, y + 0.3, z, Math.round(10 + r * 3), 0x6fd35a, 2, 4 + r, 0.2, 0.6, 12);
+        this.puff(x, y + 0.15, z, Math.round(3 + r), 0x4f9a3a, 0.5, r * 0.6, 0.7, r * 0.7, 0.9);
         return;
       }
       this.flash(x, y + 0.6, z, r * 1.3, 0xff7a40, 2.6, 0.18);

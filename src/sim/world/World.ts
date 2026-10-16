@@ -192,6 +192,8 @@ export class World {
   readonly shotFx = new EventRing(64, 4);
   /** Tetiklenen tehlike: x,z,x2,z2,tür,yarıçap */
   readonly hazardFx = new EventRing(64, 6);
+  /** Boss saldırısına hazırlanıyor (uyarı sesi): x,z,saldırı kodu (ATTACK_KINDS sırası) */
+  readonly telegraphFx = new EventRing(16, 3);
   readonly bosses = new BossController();
   /** Kamera sarsıntısı isteği (render okur): sayaç her istekte artar. */
   shakeSeq = 0;

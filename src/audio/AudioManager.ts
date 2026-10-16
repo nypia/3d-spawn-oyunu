@@ -16,6 +16,9 @@ const MUSIC_URLS = import.meta.glob<string>('../assets/audio/music/*.mp3', {
   eager: true,
 });
 
+/** Tarayıcının reddettiği oynat/askıya al sözleri: bir sonraki etkileşimde yeniden denenir. */
+const ignore = () => undefined;
+
 const fileId = (path: string) => path.replace(/^.*\//, '').replace(/\.mp3$/, '');
 
 export interface AudioSettings {
@@ -87,6 +90,7 @@ export class AudioManager {
   private current: MusicVoice | null = null;
   private wanted: MusicTrack | null = null;
   private paused = false;
+  private hidden = false;
   private lx = 0;
   private lz = 0;
   private lyaw = Math.PI;
@@ -94,24 +98,62 @@ export class AudioManager {
   /** Kullanıcı etkileşiminde çağrılır (birden çok kez çağrılabilir). */
   unlock(): void {
     if (!this.ctx) this.create();
-    const ctx = this.ctx;
-    if (ctx && ctx.state === 'suspended') void ctx.resume().then(() => this.syncMusic());
-    // iOS: <audio> öğeleri ilk kez bir etkileşim içinde oynatılınca sonradan da çalabilir.
+    if (this.hidden) return;
+    this.resumeContext();
+    // iOS: <audio> öğeleri ilk kez bir etkileşim içinde oynatılınca sonradan da çalabilir. İşaret ancak
+    // oynatma başarılı olunca konur; reddedilirse bir sonraki etkileşimde yeniden denenir.
     for (const { el } of this.voices.values()) {
-      if (el.dataset.primed) continue;
-      el.dataset.primed = '1';
+      if (el.dataset.primed || el.dataset.priming) continue;
+      el.dataset.priming = '1';
       el.muted = true;
       void el
         .play()
         .then(() => {
+          el.dataset.primed = '1';
           if (this.current?.el !== el) el.pause();
-          el.muted = false;
         })
         .catch(() => {
+          // izin yok: sonraki etkileşimde tekrar
+        })
+        .finally(() => {
           el.muted = false;
+          delete el.dataset.priming;
         });
     }
     this.syncMusic();
+  }
+
+  /** Askıdaki (ya da iOS'ta telefon/çağrı ile "interrupted") bağlamı sürdürür. */
+  private resumeContext(): void {
+    const ctx = this.ctx;
+    if (!ctx || ctx.state === 'running' || ctx.state === 'closed') return;
+    void ctx
+      .resume()
+      .then(() => this.syncMusic())
+      .catch(() => {
+        // sonraki etkileşimde tekrar denenir
+      });
+  }
+
+  /** Sekme gizlenince ses tamamen durur (döngü de durduğu için müzik başka türlü kısılmaz). */
+  setHidden(hidden: boolean): void {
+    if (hidden === this.hidden) return;
+    this.hidden = hidden;
+    const ctx = this.ctx;
+    if (!ctx) return;
+    if (hidden) {
+      this.current?.el.pause();
+      if (ctx.state === 'running') void ctx.suspend().catch(ignore);
+      return;
+    }
+    const cur = this.current;
+    void ctx
+      .resume()
+      .then(() => {
+        if (cur && this.current === cur) void cur.el.play().catch(ignore);
+        this.syncMusic();
+      })
+      .catch(ignore);
   }
 
   private create(): void {
@@ -127,6 +169,7 @@ export class AudioManager {
       return;
     }
     this.ctx = ctx;
+    ctx.onstatechange = () => this.syncMusic();
     this.master = ctx.createGain();
     this.master.connect(ctx.destination);
     this.sfxBus = ctx.createGain();
@@ -250,7 +293,7 @@ export class AudioManager {
 
   private syncMusic(): void {
     const ctx = this.ctx;
-    if (ctx?.state !== 'running') return;
+    if (ctx?.state !== 'running' || this.hidden) return;
     const want = this.wanted;
     if (this.current?.track === want) return;
     const now = ctx.currentTime;

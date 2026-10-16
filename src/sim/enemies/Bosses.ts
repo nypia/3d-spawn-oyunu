@@ -1,7 +1,7 @@
-import { BOSS, BOSSES, type BossAttack, type BossDef } from '../../data/bosses';
+import { ATTACK_KINDS, BOSS, BOSSES, type BossAttack, type BossDef } from '../../data/bosses';
 import { CHEST_BOSS } from '../../data/chests';
 import { ENEMY_INDEX, SHOT_ORB } from '../../data/enemies';
-import { HZ_BOULDER, HZ_CIRCLE, HZ_LINE, HZF_VISUAL } from '../combat/Hazards';
+import { HZ_BOULDER, HZ_CIRCLE, HZ_GLOB, HZ_LINE, HZF_VISUAL } from '../combat/Hazards';
 import { PICKUP_GOLD } from '../pickups/PickupPool';
 import { ANN_BOSS_DEAD, ANN_BOSS_SPAWN, ANN_BOSS_WARN } from '../world/announce';
 import type { World } from '../world/World';
@@ -249,6 +249,7 @@ export class BossController {
     b.attack = k;
     b.step = 0;
     b.timers[k] = a.cooldown * this.cooldownMul(world);
+    world.telegraphFx.push(e.x[i], e.z[i], ATTACK_KINDS.indexOf(a.kind));
     switch (a.kind) {
       case 'dashChain':
         this.windup(b, e, i, a.windup);
@@ -303,7 +304,7 @@ export class BossController {
           const ang = world.rng.range(0, Math.PI * 2);
           const x = world.terrain.clampToPlayable(p.x + Math.sin(ang) * r);
           const z = world.terrain.clampToPlayable(p.z + Math.cos(ang) * r);
-          world.hazards.add(HZ_BOULDER, x, z, a.radius, 1 + k * 0.12, this.damage(world, a.damage), x, z);
+          world.hazards.add(HZ_GLOB, x, z, a.radius, 1 + k * 0.12, this.damage(world, a.damage), x, z);
         }
         recover(0.4);
         return;

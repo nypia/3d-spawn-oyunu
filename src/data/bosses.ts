@@ -27,6 +27,20 @@ export type BossAttack =
   /** Her yöne küre dalgası. */
   | { kind: 'nova'; cooldown: number; count: number; damage: number; speed: number };
 
+/** Saldırı türü kodları (uyarı sesi olayı `telegraphFx` bu sırayla yazar). */
+export const ATTACK_KINDS: readonly BossAttack['kind'][] = [
+  'hopSlam',
+  'rain',
+  'dashChain',
+  'summon',
+  'slam',
+  'throw',
+  'spikeLines',
+  'spikeRing',
+  'charge',
+  'nova',
+];
+
 export interface BossDef {
   id: string;
   name: string;

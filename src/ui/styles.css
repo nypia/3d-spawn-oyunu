@@ -812,6 +812,27 @@ kbd {
     0 2px 0 #a5600d;
 }
 
+.btn-danger {
+  border-color: #ffb3a8;
+  background: linear-gradient(180deg, #e2584a, #b8322a);
+  box-shadow:
+    inset 0 2px 0 rgb(255 255 255 / 25%),
+    0 4px 0 #6e1a14;
+}
+
+.confirm,
+.error-panel {
+  width: min(420px, 100%);
+}
+
+.error-detail {
+  max-height: 120px;
+  overflow: auto;
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  word-break: break-word;
+}
+
 .buttons {
   display: flex;
   gap: 12px;
@@ -1995,6 +2016,21 @@ body.touch .controls-touch {
   letter-spacing: 2px;
 }
 
+/* Dokunmatikte ses düğmesi duraklatmanın altında (HUD'daki 🔊 dokunma katmanının altında kalır). */
+.touch-sound {
+  top: max(86px, calc(env(safe-area-inset-top) + 78px));
+  font-size: 18px;
+  letter-spacing: 0;
+}
+
+.touch-sound.muted {
+  opacity: 0.6;
+}
+
+body.touch .hud-sound {
+  display: none;
+}
+
 body.touch .hud-kills {
   right: calc(max(12px, env(safe-area-inset-right)) + 54px);
   top: max(44px, calc(env(safe-area-inset-top) + 34px));
@@ -2163,4 +2199,8 @@ body.touch .hp-text {
 body.touch .debug {
   bottom: auto;
   top: 90px;
+}
+/* Masaüstünde fare kilitli değilken slotun üzerine gelince adı ve açıklaması görünür. */
+body:not(.touch) .hud-loadout .slot {
+  pointer-events: auto;
 }

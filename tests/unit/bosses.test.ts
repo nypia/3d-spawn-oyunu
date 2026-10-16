@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { BALANCE } from '../../src/data/balance';
-import { BOSS, BOSSES } from '../../src/data/bosses';
+import { ATTACK_KINDS, BOSS, BOSSES } from '../../src/data/bosses';
 import { CHEST_BOSS } from '../../src/data/chests';
 import { ENEMIES, ENEMY_INDEX } from '../../src/data/enemies';
-import { HZ_CIRCLE, HZ_LINE } from '../../src/sim/combat/Hazards';
+import { HZ_CIRCLE, HZ_GLOB, HZ_LINE } from '../../src/sim/combat/Hazards';
 import { EF_BOSS, EF_SUMMON } from '../../src/sim/enemies/EnemyPool';
 import { NO_INPUT } from '../../src/sim/player/Player';
 import { ANN_BOSS_DEAD, ANN_BOSS_SPAWN, ANN_BOSS_WARN } from '../../src/sim/world/announce';
@@ -119,6 +119,28 @@ describe('tehlike alanları', () => {
     expect(maxHover).toBeGreaterThan(2);
     const j = bossIndex(w);
     expect(Math.hypot(e.x[j] - w.player.x, e.z[j] - w.player.z)).toBeLessThan(4);
+  });
+
+  it('balçık yağmuru yeşil damla (HZ_GLOB) düşürür; saldırı başlarken uyarı olayı yazılır', () => {
+    const w = quiet();
+    w.bosses.spawn(w, 0);
+    const i = bossIndex(w);
+    const e = w.enemies;
+    const b = w.bosses.active[0];
+    // Zıplamayı ertele, yağmur hemen gelsin.
+    b.timers[0] = 99;
+    b.timers[1] = 0;
+    e.x[i] = w.player.x + 10;
+    e.z[i] = w.player.z;
+    const kinds = new Set<number>();
+    for (let t = 0; t < 1.5; t += DT) {
+      w.step(NO_INPUT, DT);
+      for (let k = 0; k < w.hazards.count; k++) kinds.add(w.hazards.kind[k]);
+    }
+    expect(kinds.has(HZ_GLOB)).toBe(true);
+    const tele: number[] = [];
+    w.telegraphFx.drain(0, (d, o) => tele.push(d[o + 2]));
+    expect(tele.map((k) => ATTACK_KINDS[k])).toContain('rain');
   });
 });
 

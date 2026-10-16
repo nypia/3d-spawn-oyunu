@@ -64,6 +64,7 @@ export class Renderer3D {
   private readonly effects: Effects;
   /** Yalnızca yüksek kalitede: bloom (parlayan taş, büyü, alev) için HDR art işlem. */
   private composer: EffectComposer | null = null;
+  private bloomPass: UnrealBloomPass | null = null;
   private time = 0;
   /** Kare hızı hedefin altında geçen süre (otomatik kalite düşürme). */
   private slowTime = 0;
@@ -140,7 +141,8 @@ export class Renderer3D {
       const composer = new EffectComposer(this.renderer, target);
       composer.addPass(new RenderPass(this.scene, this.camera));
       // Eşik ~1: yalnızca HDR (ışıyan) yüzeyler parlar; güneşli çimen ve gök parlamaz.
-      composer.addPass(new UnrealBloomPass(new Vector2(256, 256), 0.55, 0.45, 1.0));
+      this.bloomPass = new UnrealBloomPass(new Vector2(256, 256), 0.55, 0.45, 1.0);
+      composer.addPass(this.bloomPass);
       composer.addPass(new OutputPass());
       this.composer = composer;
     }
@@ -210,8 +212,9 @@ export class Renderer3D {
   }
 
   /**
-   * Zayıf GPU koruması: toplam 3 sn boyunca 45 FPS'in altında kalınırsa önce bloom kapanır, sonra
-   * piksel oranı 1'e iner. Hızlı kareler sayacı eritir; tek seferlik takılma (dt en fazla 0.1) yetmez.
+   * Zayıf GPU koruması: toplam 3 sn boyunca 45 FPS'in altında kalınırsa önce bloom geçişi kapanır
+   * (composer'ın MSAA hedefi kalır: kenar yumuşatma kaybolmaz), sonra piksel oranı 1'e iner, en son
+   * composer tamamen bırakılır. Hızlı kareler sayacı eritir; tek seferlik takılma yetmez.
    */
   private adapt(dt: number): void {
     if (!this.adaptive || dt <= 0) return;
@@ -219,13 +222,15 @@ export class Renderer3D {
     else this.slowTime = Math.max(0, this.slowTime - dt * 0.5);
     if (this.slowTime < 3) return;
     this.slowTime = 0;
-    if (this.composer) {
-      this.composer.dispose();
-      this.composer = null;
+    if (this.bloomPass?.enabled) {
+      this.bloomPass.enabled = false;
     } else if (this.pixelRatio > 1) {
       this.pixelRatio = 1;
       this.renderer.setPixelRatio(1);
       this.resize();
+    } else if (this.composer) {
+      this.composer.dispose();
+      this.composer = null;
     }
   }
 
@@ -265,7 +270,11 @@ export class Renderer3D {
     CROWD_BLOOD.value = s;
   }
 
-  render(world: World, dt: number, cinematic: boolean): void {
+  /**
+   * `live`: sim bu karede ilerliyor mu (seviye, sandık, duraklatma ekranlarında hayır). Duraklatılmışken
+   * kahraman donar ve koşu tozu çıkmaz; ölüm ve menü animasyonları sürer.
+   */
+  render(world: World, dt: number, cinematic: boolean, live = true): void {
     this.time += dt;
     if (!cinematic) this.adapt(dt);
     const p = world.player;
@@ -279,7 +288,8 @@ export class Renderer3D {
     this.sun.position.set(p.x + SUN_DIR.x * 55, p.y + SUN_DIR.y * 55, p.z + SUN_DIR.z * 55);
     this.sun.target.position.set(p.x, p.y, p.z);
 
-    this.hero.update(p, world.terrain, dt, this.time, world.gameOver);
+    const heroDt = live || cinematic || world.gameOver ? dt : 0;
+    this.hero.update(p, world.terrain, heroDt, this.time, world.gameOver);
     this.worldView.update(world, this.time, dt);
     this.effects.begin();
     this.weaponFx.update(world, this.time, dt, this.orbHalo);
@@ -288,7 +298,7 @@ export class Renderer3D {
     this.scatter.update(this.time, p.x, p.z);
     this.sky.update(this.camera.position, this.time);
     this.pulses.update(world, dt);
-    this.effects.update(world, dt, this.time, this.camera.position);
+    this.effects.update(world, dt, this.time, this.camera.position, live && !cinematic);
     this.damageNumbers.update(world, dt);
     this.renderer.info.reset();
     if (this.composer) this.composer.render(dt);

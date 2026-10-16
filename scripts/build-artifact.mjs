@@ -32,12 +32,14 @@ if (bareStatic.test(js) || bareDynamic.test(js)) {
 }
 js = js.replace(/<\/script/gi, '<\\/script');
 const css = cssRel ? readFileSync(join(outDir, cssRel), 'utf8') : '';
+// Dev betik inmeden görünen statik açılış yazısı (index.html'deki <!--boot--> bloğu).
+const boot = html.match(/<!--boot-->([\s\S]*?)<!--\/boot-->/)?.[1] ?? '';
 
 const page = `<title>SPAWN</title>
 <style>
 ${css}
 </style>
-<div id="app"></div>
+<div id="app">${boot}</div>
 <script type="module">
 ${js}
 </script>

@@ -1,5 +1,6 @@
+import { ATTACK_KINDS, type BossAttack } from '../data/bosses';
 import { ENEMIES, SHOT_ARROW } from '../data/enemies';
-import { HZ_LINE } from '../sim/combat/Hazards';
+import { HZ_GLOB, HZ_LINE } from '../sim/combat/Hazards';
 import { PROJ_AXE, PROJ_BOLT, PROJ_PELLET } from '../sim/combat/ProjectilePool';
 import { PICKUP_BAG, PICKUP_GOLD, PICKUP_HEAL } from '../sim/pickups/PickupPool';
 import {
@@ -41,6 +42,20 @@ const DEATH: Record<string, SoundId> = {
   goblin: 'deathHeavy',
 };
 
+/** Boss saldırıya hazırlanırken çalan uyarı sesi (tür → ses, hız). */
+const TELEGRAPH: Record<BossAttack['kind'], [SoundId, number]> = {
+  hopSlam: ['jump', 0.6],
+  rain: ['slime', 0.8],
+  dashChain: ['force', 1.2],
+  summon: ['bell', 0.9],
+  slam: ['bell', 0.7],
+  throw: ['swing', 0.6],
+  spikeLines: ['spikes', 0.7],
+  spikeRing: ['spikes', 0.6],
+  charge: ['force', 0.9],
+  nova: ['orb', 0.8],
+};
+
 const STEP = 1.9;
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
 
@@ -61,6 +76,7 @@ export class SoundEvents {
   private shot = 0;
   private ann = 0;
   private hazard = 0;
+  private telegraph = 0;
   private goblin = 0;
   private jump = 0;
   private land = 0;
@@ -87,6 +103,7 @@ export class SoundEvents {
     this.shot = w.shotFx.written;
     this.ann = w.announceFx.written;
     this.hazard = w.hazardFx.written;
+    this.telegraph = w.telegraphFx.written;
     this.goblin = w.goblinFx.written;
     const p = w.player;
     this.jump = p.jumpSeq;
@@ -97,7 +114,8 @@ export class SoundEvents {
     this.wasOver = w.gameOver;
   }
 
-  update(w: World, a: AudioManager, dt: number, time: number): void {
+  /** `live`: sim ilerliyor mu; duraklatma/seviye/sandık ekranlarında adım sesi çalmaz. */
+  update(w: World, a: AudioManager, dt: number, time: number, live = true): void {
     if (w !== this.world) this.attach(w);
     const p = w.player;
 
@@ -179,7 +197,12 @@ export class SoundEvents {
     this.hazard = w.hazardFx.drain(this.hazard, (d, o) => {
       const pos = { x: d[o], z: d[o + 1] };
       if (d[o + 4] === HZ_LINE) a.play('spikes', { ...pos, rate: rand(0.9, 1.1) });
+      else if (d[o + 4] === HZ_GLOB) a.play('slime', { ...pos, rate: rand(0.9, 1.2) });
       else a.play(d[o + 5] > 3 ? 'boom' : 'explosion', { ...pos, rate: rand(0.85, 1) });
+    });
+    this.telegraph = w.telegraphFx.drain(this.telegraph, (d, o) => {
+      const t = TELEGRAPH[ATTACK_KINDS[d[o + 2]]];
+      if (t) a.play(t[0], { x: d[o], z: d[o + 1], rate: t[1], vol: 1.2 });
     });
     this.goblin = w.goblinFx.drain(this.goblin, (d, o) => {
       const code = d[o + 3];
@@ -203,7 +226,7 @@ export class SoundEvents {
       this.slide = p.slideSeq;
       a.play('slide');
     }
-    if (p.grounded && !p.sliding && p.speed > 1.5) {
+    if (live && p.grounded && !p.sliding && p.speed > 1.5) {
       this.stepDist += p.speed * dt;
       if (this.stepDist > STEP) {
         this.stepDist = 0;

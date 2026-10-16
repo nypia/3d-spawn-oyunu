@@ -61,6 +61,8 @@ export class Game {
   private lastHp = 0;
   private lastShake = 0;
   private last = performance.now();
+  /** Beklenmeyen hata ya da grafik bağlamı kaybı: döngü durur, hata ekranı açık. */
+  private halted = false;
 
   constructor(root: HTMLElement, assets: GameAssets) {
     this.flags = readFlags(location.search, location.hash);
@@ -99,24 +101,30 @@ export class Game {
    */
   private bindAudio(root: HTMLElement): void {
     const unlock = () => this.audio.unlock();
-    for (const ev of ['pointerdown', 'keydown', 'touchstart']) {
+    // iOS'ta yalnızca dokunuşun sonu (touchend/click) "kullanıcı hareketi" sayılabilir.
+    for (const ev of ['pointerdown', 'pointerup', 'keydown', 'touchstart', 'touchend', 'click']) {
       document.addEventListener(ev, unlock, { capture: true, passive: true });
     }
     root.addEventListener(
       'click',
       (e) => {
+        // Kartlar ve kendi sesi olan butonlar (yenile, atla) tıklama sesi çalmaz.
         const b = (e.target as HTMLElement).closest('button');
-        if (b && !b.classList.contains('card')) this.audio.play('click');
+        if (b && !b.classList.contains('card') && b.dataset.sfx !== 'none') this.audio.play('click');
       },
       { capture: true },
     );
     this.hud.onSound = () => this.toggleMute();
+    this.touch.onSound = () => this.toggleMute();
     this.hud.setMuted(this.audio.settings.muted);
+    this.touch.setMuted(this.audio.settings.muted);
   }
 
-  private toggleMute(): void {
+  private toggleMute(): boolean {
     const muted = this.audio.toggleMute();
     this.hud.setMuted(muted);
+    this.touch.setMuted(muted);
+    return muted;
   }
 
   /** Nadirliğe göre açılış sesi; efsanevide müzik kısılır. */
@@ -175,14 +183,66 @@ export class Game {
     return { state: this.state, world: this.world };
   }
 
+  /**
+   * Ana döngü. Sıradaki kare hatadan önce istenir ve kare try/catch içinde çalışır: tek bir hata oyunu
+   * sessizce dondurmak yerine hata ekranı açar.
+   */
   run(): void {
+    this.last = performance.now();
     const loop = (now: number) => {
+      if (this.halted) return;
+      requestAnimationFrame(loop);
       const dt = Math.min(0.1, (now - this.last) / 1000);
       this.last = now;
-      this.frame(dt);
-      requestAnimationFrame(loop);
+      try {
+        this.frame(dt);
+      } catch (err) {
+        this.crash(err);
+      }
     };
     requestAnimationFrame(loop);
+  }
+
+  /** Hata ekranı: "Devam et" duraklatma menüsüne döner, "Yeniden yükle" sayfayı tazeler. */
+  crash(err: unknown): void {
+    if (this.halted) return;
+    console.error(err);
+    this.halted = true;
+    this.input.exitLock();
+    this.touch.setVisible(false);
+    this.audio.setPaused(true);
+    const detail = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+    this.screens.showError('Bir şeyler ters gitti', detail, [
+      { label: 'Devam et', run: () => this.recover() },
+      { label: 'Yeniden yükle', run: () => location.reload() },
+    ]);
+  }
+
+  private recover(): void {
+    this.halted = false;
+    // Açık ekran (seviye, sandık, oyun sonu) duraklatmadan dönünce kare döngüsünce yeniden açılır.
+    if (this.state === 'menu') this.showStart();
+    else this.pause();
+    this.run();
+  }
+
+  /** Grafik bağlamı kayboldu (sürücü sıfırlandı, sekme çok uzun arka planda): döngü bekler. */
+  private contextLost(): void {
+    if (this.halted) return;
+    this.halted = true;
+    this.input.exitLock();
+    this.touch.setVisible(false);
+    this.screens.showError('Grafik bağlamı kayboldu', 'Tarayıcı ekran kartı bağlantısını sıfırladı.', [
+      { label: 'Yeniden yükle', run: () => location.reload() },
+    ]);
+  }
+
+  private contextRestored(): void {
+    if (!this.halted) return;
+    this.screens.showError('Grafik geri geldi', '', [
+      { label: 'Devam et', run: () => this.recover() },
+      { label: 'Yeniden yükle', run: () => location.reload() },
+    ]);
   }
 
   private createWorld(): World {
@@ -233,7 +293,7 @@ export class Game {
     inp.onKey('Escape', () => {
       if (this.state === 'reward' && this.world.reward?.kind === 'pact') this.takeReward(-1);
       else if (this.state === 'playing') this.pause();
-      else if (this.state === 'paused') this.resume();
+      else if (this.state === 'paused' && !this.screens.back()) this.resume();
     });
     for (const [code, i] of [
       ['Digit1', 0],
@@ -253,8 +313,19 @@ export class Game {
       if (this.state === 'playing' && !inp.locked) inp.requestLock();
     });
     document.addEventListener('visibilitychange', () => {
+      this.audio.setHidden(document.hidden);
       if (document.hidden && this.state === 'playing') this.pause();
     });
+    // Dokunmatikte ve iframe içinde kilit yok: odak kaybı (bildirim perdesi, başka pencere) da duraklatır.
+    window.addEventListener('blur', () => {
+      if (this.state === 'playing' && !document.hasFocus()) this.pause();
+    });
+    const canvas = this.renderer.canvas;
+    canvas.addEventListener('webglcontextlost', (e) => {
+      e.preventDefault();
+      this.contextLost();
+    });
+    canvas.addEventListener('webglcontextrestored', () => this.contextRestored());
 
     if (this.debug) {
       inp.onKey('KeyG', () => {
@@ -275,10 +346,17 @@ export class Game {
     this.screens.showPause(
       this.world,
       () => this.resume(),
-      () => {
-        this.world = this.createWorld();
-        this.startRun();
-      },
+      () =>
+        this.screens.showConfirm(
+          'Yeniden başla?',
+          'Bu koşu biter, yeni bir haritada baştan başlarsın.',
+          'Yeniden başla',
+          () => {
+            this.world = this.createWorld();
+            this.startRun();
+          },
+          () => this.pause(),
+        ),
       {
         sfx: a.settings.sfx,
         music: a.settings.music,
@@ -477,11 +555,12 @@ export class Game {
       }
     }
 
-    this.renderer.render(this.world, dt, this.state === 'menu');
+    const live = this.state === 'playing';
+    this.renderer.render(this.world, dt, this.state === 'menu', live);
     this.time += dt;
     const p = this.world.player;
     this.audio.setListener(p.x, p.z, this.renderer.rig.yaw);
-    if (this.state !== 'menu') this.soundEvents.update(this.world, this.audio, dt, this.time);
+    if (this.state !== 'menu') this.soundEvents.update(this.world, this.audio, dt, this.time, live);
     this.audio.setMusic(this.musicFor());
     this.audio.setPaused(this.state === 'paused');
     if (this.state !== 'menu') this.hud.update(this.world, this.renderer.rig.yaw);
