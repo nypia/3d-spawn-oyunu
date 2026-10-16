@@ -7,9 +7,11 @@ import { CHEST_PLAIN, CHEST_TIERS } from '../data/chests';
 import { EVOLUTION_BY_WEAPON } from '../data/evolutions';
 import { HEROES } from '../data/heroes';
 import { ITEMS } from '../data/items';
+import { META_UPGRADES } from '../data/metaUpgrades';
 import { PACTS } from '../data/pacts';
 import { TOME_INDEX, TOMES } from '../data/tomes';
 import { DebugOverlay } from '../debug/DebugOverlay';
+import { MetaStore } from '../meta/MetaStore';
 import type { GameAssets } from '../render/assets/loadAssets';
 import { detectQuality, isTouchDevice, type QualitySettings } from '../render/Quality';
 import { Renderer3D } from '../render/Renderer3D';
@@ -20,7 +22,7 @@ import { summarizeRun } from '../sim/world/RunStats';
 import { World } from '../sim/world/World';
 import type { RewardSounds } from '../ui/ChestReel';
 import { Hud } from '../ui/Hud';
-import { submitRun } from '../ui/records';
+import { menuPanel, shopPanel } from '../ui/MenuScreens';
 import { Screens } from '../ui/Screens';
 import { TouchControls } from '../ui/TouchControls';
 import { type Flags, readFlags } from './flags';
@@ -30,7 +32,8 @@ import { randomSeed } from './Rng';
 type State = 'menu' | 'playing' | 'levelup' | 'reward' | 'paused' | 'victory' | 'gameover';
 
 const STEP = BALANCE.simStep;
-const HERO_KEY = 'spawn.hero';
+/** package.json sürümü (vite define). */
+const VERSION = __APP_VERSION__;
 const MAX_STEPS_PER_FRAME = 5;
 
 /**
@@ -51,6 +54,10 @@ export class Game {
   private readonly simInput: PlayerInput = { moveX: 0, moveZ: 0, jump: false, slide: false };
   /** Ses: efektler, müzik ve sim olaylarından ses üretimi. */
   readonly audio = new AudioManager();
+  /** Kalıcı ilerleme (gümüş, güçler, kahramanlar, rekor). */
+  readonly meta = new MetaStore();
+  /** Menüde bakılan kahraman (kilitli olabilir; oyun seçili açık kahramanla başlar). */
+  private previewHero: string;
   private readonly soundEvents = new SoundEvents();
   /** Sandık çarkının ses kancaları. */
   private readonly rewardSounds: RewardSounds = {
@@ -69,6 +76,7 @@ export class Game {
   private seenVictories = 0;
 
   constructor(root: HTMLElement, assets: GameAssets) {
+    this.previewHero = this.meta.data.hero;
     this.flags = readFlags(location.search, location.hash);
     this.quality = detectQuality(this.flags.quality);
     const bench = this.flags.bench;
@@ -151,30 +159,66 @@ export class Game {
     return w.cycle > 1 ? 'blood' : 'day';
   }
 
-  /** Seçilen maceracı tarayıcıda hatırlanır (gizli pencerede depolama olmayabilir). */
-  private heroId = (() => {
-    try {
-      return localStorage.getItem(HERO_KEY) ?? HEROES[0].id;
-    } catch {
-      return HEROES[0].id;
-    }
-  })();
+  /** Ana menü: kahramanlar (seçilen arkada görünür), gümüş, rekor, dükkân. */
+  private showStart(refresh = false): void {
+    const meta = this.meta;
+    this.renderer.setHero(this.previewHero);
+    this.screens.showPanel(
+      menuPanel(
+        {
+          version: VERSION,
+          silver: meta.silver,
+          persistent: meta.persistent,
+          heroes: HEROES.map((def) => ({
+            def,
+            unlocked: meta.isUnlocked(def.id),
+            selected: def.id === this.previewHero,
+          })),
+          best: meta.data.best,
+        },
+        {
+          play: () => this.startRun(),
+          selectHero: (id) => {
+            this.previewHero = id;
+            meta.selectHero(id);
+            this.showStart(true);
+          },
+          unlockHero: (id) => {
+            if (!meta.unlockHero(id)) return;
+            this.audio.play('revealRare');
+            meta.selectHero(id);
+            this.showStart(true);
+          },
+          shop: () => this.showShop(),
+        },
+      ),
+      'start-overlay',
+      null,
+      refresh,
+    );
+  }
 
-  private showStart(): void {
-    this.renderer.setHero(this.heroId);
-    this.screens.showStart(() => this.startRun(), {
-      list: HEROES,
-      selected: this.heroId,
-      onSelect: (id) => {
-        this.heroId = id;
-        this.renderer.setHero(id);
-        try {
-          localStorage.setItem(HERO_KEY, id);
-        } catch {
-          // depolama yoksa seçim yalnızca bu oturumda geçerli
-        }
-      },
-    });
+  /** Dükkân: kalıcı güçler gümüşle alınır. */
+  private showShop(refresh = false): void {
+    const meta = this.meta;
+    this.screens.showPanel(
+      shopPanel(
+        meta.silver,
+        META_UPGRADES.map((def) => ({ def, rank: meta.rank(def.id), cost: meta.nextCost(def.id) })),
+        {
+          buy: (id) => {
+            if (!meta.buy(id)) return;
+            this.audio.play('coins');
+            this.showShop(true);
+          },
+          back: () => this.showStart(),
+        },
+        meta.persistent,
+      ),
+      '',
+      () => this.showStart(),
+      refresh,
+    );
   }
 
   /** Shader'ları önceden derler (açılış ekranı arkasında). */
@@ -249,19 +293,23 @@ export class Game {
     ]);
   }
 
-  private createWorld(): World {
+  /** Yeni dünya: seçili kahraman ve kalıcı güçlerle (`seed` verilirse aynı harita). */
+  private createWorld(seed = this.flags.seed ?? randomSeed()): World {
     const bench = this.flags.bench;
     const world = new World({
-      seed: this.flags.seed ?? randomSeed(),
+      seed,
       enemyCap: Math.max(this.quality.enemyCap, bench),
       godMode: bench > 0,
+      loadout: bench > 0 ? undefined : this.meta.loadout(),
     });
     this.renderer.setWorld(world);
     return world;
   }
 
   private startRun(): void {
-    if (this.world.time > 0 || this.world.gameOver) this.world = this.createWorld();
+    // Menüde kahraman ya da güç değişmiş olabilir: dünya güncel donanımla (aynı haritada) kurulur.
+    const fresh = this.world.time === 0 && !this.world.gameOver;
+    this.world = this.createWorld(fresh ? this.world.seed : undefined);
     this.seenVictories = 0;
     if (this.flags.bench > 0) this.world.spawnBurst(this.flags.bench, 6, 45);
     this.lastHp = this.world.player.hp;
@@ -424,13 +472,17 @@ export class Game {
     this.input.exitLock();
     this.audio.duck(2.5);
     this.audio.play('revealLegend');
+    const w = this.world;
+    const summary = summarizeRun(w);
+    const silver = this.meta.previewSilver({ ...summary, outcome: 'victory' }, w.cheated || w.godMode);
     this.screens.showVictory(
-      summarizeRun(this.world),
+      summary,
       () => this.continueVictory(),
       () => {
-        this.world.finishRun('victory');
+        w.finishRun('victory');
         this.endRun();
       },
+      silver > 0 ? `Şimdi bitirirsen +${silver} 🥈 gümüş (zafer ×1,25). Devam edersen daha fazlası…` : '',
     );
   }
 
@@ -445,9 +497,14 @@ export class Game {
     const w = this.world;
     this.setState('gameover');
     this.input.exitLock();
-    const record = w.cheated ? undefined : submitRun(w);
+    const summary = summarizeRun(w);
+    const result = this.meta.recordRun(summary, w.cheated || w.godMode, this.meta.data.hero);
+    const lines: string[] = [];
+    if (result.silver > 0) lines.push(`+${result.silver} 🥈 gümüş · toplam ${this.meta.silver}`);
+    for (const hero of result.unlocked) lines.push(`🔓 ${hero.name} (${hero.title}) açıldı!`);
+    if (w.cheated) lines.push('Hile kullanıldı: gümüş ve rekor sayılmaz');
     this.screens.showGameOver(
-      summarizeRun(w),
+      summary,
       {
         restart: () => {
           this.world = this.createWorld();
@@ -455,7 +512,10 @@ export class Game {
         },
         menu: () => this.toMenu(),
       },
-      { record },
+      {
+        record: result.best && !w.cheated ? { best: result.best, isNew: result.isNew } : undefined,
+        lines,
+      },
     );
   }
 

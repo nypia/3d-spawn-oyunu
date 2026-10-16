@@ -57,8 +57,9 @@ export interface RunSummary {
   level: number;
   kills: number;
   eliteKills: number;
-  /** Öldürülen boss adları (sırayla). */
+  /** Öldürülen boss adları ve BOSSES indeksleri (sırayla). */
   bosses: string[];
+  bossIndices: number[];
   victories: number;
   damage: number;
   /** Hasara göre azalan silahlar. */
@@ -103,6 +104,7 @@ export function summarizeRun(w: World): RunSummary {
     kills: w.kills,
     eliteKills: w.eliteKills,
     bosses: w.bosses.killedIndex.map((i) => BOSSES[i]?.name ?? '?'),
+    bossIndices: [...w.bosses.killedIndex],
     victories: w.victories,
     damage: w.damageDealt,
     weapons,

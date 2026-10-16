@@ -1,16 +1,15 @@
 import { BALANCE } from '../data/balance';
 import { EVOLUTIONS } from '../data/evolutions';
-import type { HeroDef } from '../data/heroes';
 import { ITEMS } from '../data/items';
 import { TOME_INDEX, TOMES } from '../data/tomes';
 import { WEAPON_INDEX, WEAPONS, weaponMaxLevel } from '../data/weapons';
+import type { RunRecord } from '../meta/save';
 import { RARITIES } from '../sim/progression/Rarity';
 import type { SlotUsage, UpgradeView } from '../sim/progression/Upgrades';
 import type { RunSummary } from '../sim/world/RunStats';
 import type { World } from '../sim/world/World';
 import { ChestReel, type ChestView, type RewardSounds } from './ChestReel';
 import { formatTime, h } from './dom';
-import type { RunRecord } from './records';
 import { revealBurst } from './rewardFx';
 import { buildIcons, buildPanel, statList, summaryRows, weaponTable } from './runSummary';
 
@@ -26,12 +25,6 @@ export interface EvolutionView {
 }
 
 export type GuideTab = 'items' | 'evolutions';
-
-export interface HeroPicker {
-  list: readonly HeroDef[];
-  selected: string;
-  onSelect: (id: string) => void;
-}
 
 export interface PactView {
   icon: string;
@@ -113,6 +106,17 @@ export class Screens {
     this.el.style.display = '';
   }
 
+  /**
+   * Hazır bir paneli gösterir (ana menü, dükkân…); `back` verilirse Esc oraya döner. `refresh`: aynı
+   * ekran yeniden çiziliyor (satın alma, kahraman seçimi): giriş animasyonu tekrar oynamaz.
+   */
+  showPanel(panel: HTMLElement, overlayClass = '', back: (() => void) | null = null, refresh = false): void {
+    if (refresh) panel.classList.add('no-anim');
+    this.show(panel);
+    if (overlayClass) this.el.classList.add(overlayClass);
+    this.backFn = back;
+  }
+
   /** Esc: açık alt ekrandan geri döner (döndüyse true). */
   back(): boolean {
     const fn = this.backFn;
@@ -149,44 +153,6 @@ export class Screens {
         h('div.buttons', {}, ...buttons),
       ),
     );
-  }
-
-  showStart(onPlay: () => void, heroes?: HeroPicker): void {
-    const play = h('button.btn.btn-primary', { 'data-testid': 'play' }, 'OYNA');
-    play.addEventListener('click', onPlay);
-    const picker = heroes ? heroPicker(heroes) : '';
-    const keys = [
-      ['WASD', 'Hareket'],
-      ['Fare', 'Kamera (tıkla → kilitle)'],
-      ['Space', 'Zıpla'],
-      ['Shift', 'Kay: yokuş aşağı hızlanırsın, kayarken zıpla'],
-      ['Q / E', 'Kamerayı döndür'],
-      ['Esc', 'Duraklat'],
-    ];
-    const touchKeys = [
-      ['Sol yarı', 'Sürükle → koş'],
-      ['Sağ yarı', 'Sürükle → kamera'],
-      ['ZIPLA', 'Zıpla'],
-      ['KAY', 'Basılı tut → kay, yokuş aşağı hızlan'],
-      ['II', 'Duraklat'],
-    ];
-    const list = (rows: string[][], cls: string) =>
-      h(`ul.controls.${cls}`, {}, ...rows.map(([k, v]) => h('li', {}, h('kbd', {}, k), ` ${v}`)));
-    // Hangisinin görüneceğine CSS karar verir (body.touch); ilk dokunuşta değişir.
-    const controls = h('div', {}, list(keys, 'controls-keys'), list(touchKeys, 'controls-touch'));
-    const panel = h(
-      'div.panel.start',
-      {},
-      h('h1.title', {}, 'SPAWN'),
-      h('p.subtitle', {}, '3D survivors-like · v0.5'),
-      h('p.lead', {}, 'Silahların otomatik saldırır. Hayatta kal, XP topla, güçlen.'),
-      picker,
-      controls,
-      play,
-    );
-    this.show(panel);
-    // Panel solda (dikey ekranda altta): sahnedeki kahraman görünsün.
-    this.el.classList.add('start-overlay');
   }
 
   showLevelUp(
@@ -559,24 +525,4 @@ function evolutionGuide(world: World): HTMLElement {
     h('p.note', {}, 'Silah maks seviyede ve eşleşen kitap sende varken açtığın sandık evrim verir.'),
     h('section.guide-group', { 'data-rarity': '3' }, h('ul', {}, ...rows)),
   );
-}
-
-/** Maceracı seçimi: seçilen karakter arkadaki sahnede hemen değişir. */
-function heroPicker(p: HeroPicker): HTMLElement {
-  const buttons = p.list.map((hero) => {
-    const b = h(
-      `button.hero-chip${hero.id === p.selected ? '.active' : ''}`,
-      { 'data-testid': `hero-${hero.id}`, 'aria-pressed': String(hero.id === p.selected) },
-      hero.name,
-    );
-    b.addEventListener('click', () => {
-      for (const other of buttons) {
-        other.classList.toggle('active', other === b);
-        other.setAttribute('aria-pressed', String(other === b));
-      }
-      p.onSelect(hero.id);
-    });
-    return b;
-  });
-  return h('div.hero-picker', {}, h('span.hero-label', {}, 'Maceracın:'), ...buttons);
 }

@@ -639,6 +639,10 @@ body.touch .hud-hint {
   animation: panel-in 0.22s ease-out both;
 }
 
+.panel.no-anim {
+  animation: none;
+}
+
 @keyframes panel-in {
   from {
     opacity: 0;
@@ -680,46 +684,6 @@ body.touch .hud-hint {
   font-size: 14px;
   font-weight: 700;
   letter-spacing: 1px;
-}
-
-.hero-picker {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  align-items: center;
-  gap: 8px;
-  margin: 0 0 14px;
-}
-
-.hero-label {
-  color: var(--muted);
-  font-size: 14px;
-  font-weight: 700;
-}
-
-.hero-chip {
-  padding: 4px 18px;
-  border: 2px solid rgb(255 255 255 / 20%);
-  border-radius: 999px;
-  background: linear-gradient(180deg, #3a4472, #262c4a);
-  box-shadow: 0 3px 0 rgb(0 0 0 / 30%);
-  color: var(--text);
-  font-family: var(--font-display);
-  font-size: 18px;
-  font-weight: 800;
-  cursor: pointer;
-  transition: transform 0.08s;
-}
-
-.hero-chip:hover {
-  transform: translateY(-2px);
-}
-
-.hero-chip.active {
-  border-color: #fff3b0;
-  background: linear-gradient(180deg, #ffe07a, #ffbf2e);
-  box-shadow: 0 3px 0 #a5600d;
-  color: var(--accent-ink);
 }
 
 .lead {
@@ -854,12 +818,12 @@ kbd {
   background: linear-gradient(180deg, rgb(36 44 80 / 88%), rgb(18 22 42 / 88%));
 }
 
-.panel.start .hero-picker {
-  justify-content: flex-start;
-}
-
 .panel.start .controls {
   margin-left: 0;
+}
+
+.panel.start .menu-controls .controls {
+  margin: 6px 0 0;
 }
 
 .panel.start .btn-primary {
@@ -880,18 +844,9 @@ kbd {
     text-align: center;
   }
 
-  .panel.start .hero-picker {
-    justify-content: center;
-  }
-
   /* Dikey telefonda kahraman görünsün: kontroller oyun içi ipucunda zaten var. */
   .panel.start .controls {
     display: none;
-  }
-
-  .panel.start .hero-label {
-    width: 100%;
-    text-align: center;
   }
 }
 
@@ -2182,11 +2137,6 @@ body.touch .hp-text {
     font-size: 14px;
   }
 
-  .hero-chip {
-    padding: 2px 13px;
-    font-size: 15px;
-  }
-
   .hud-timer {
     font-size: 28px;
   }
@@ -2405,5 +2355,246 @@ body:not(.touch) .hud-loadout .slot {
 
   .build-stats {
     grid-template-columns: repeat(2, 1fr auto);
+  }
+}
+
+/* ---------------------------------------------------------------- Ana menü ve dükkân */
+
+.menu-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 4px 0 10px;
+}
+
+.menu-head .subtitle {
+  margin: 0;
+}
+
+.silver-chip {
+  padding: 3px 12px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #e8eef8, #a9b6cc);
+  box-shadow: 0 3px 0 rgb(0 0 0 / 30%);
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.silver-chip small {
+  font-size: 11px;
+}
+
+.shop .silver-chip {
+  display: inline-block;
+  margin: 2px 0 4px;
+}
+
+.hero-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 0 0 10px;
+}
+
+.hero-card {
+  position: relative;
+  display: grid;
+  grid-template-columns: 34px 1fr;
+  grid-template-rows: auto auto;
+  column-gap: 8px;
+  align-items: center;
+  padding: 8px 10px;
+  border: 2px solid rgb(255 255 255 / 16%);
+  border-radius: 14px;
+  background: linear-gradient(180deg, #3a4472, #262c4a);
+  box-shadow: 0 3px 0 rgb(0 0 0 / 30%);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: transform 0.08s;
+}
+
+.hero-card:hover {
+  transform: translateY(-2px);
+}
+
+.hero-card.active {
+  border-color: #fff3b0;
+  box-shadow:
+    0 0 0 2px rgb(255 211 77 / 45%),
+    0 3px 0 #a5600d;
+}
+
+.hero-card.locked {
+  filter: saturate(0.4);
+}
+
+.hero-card.locked.active {
+  filter: none;
+}
+
+.hero-weapon {
+  grid-row: span 2;
+  font-size: 26px;
+  text-align: center;
+}
+
+.hero-name {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+.hero-name small {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.hero-passive {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.hero-lock {
+  position: absolute;
+  top: -8px;
+  right: 6px;
+  padding: 1px 8px;
+  border-radius: 8px;
+  background: var(--ink);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.menu-best {
+  margin: 0 0 8px;
+  color: #ffd34d;
+  font-weight: 800;
+}
+
+.menu-side {
+  margin-top: 10px;
+}
+
+.menu-controls summary {
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.shop {
+  width: min(760px, 100%);
+}
+
+.shop-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+  margin: 12px 0 4px;
+}
+
+.shop-card {
+  display: grid;
+  justify-items: center;
+  gap: 3px;
+  padding: 10px 8px;
+  border: 2px solid rgb(255 255 255 / 16%);
+  border-radius: 14px;
+  background: linear-gradient(180deg, #3a4472, #262c4a);
+  box-shadow: 0 3px 0 rgb(0 0 0 / 30%);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.shop-card:hover:not(:disabled) {
+  transform: translateY(-2px);
+}
+
+.shop-card:disabled {
+  cursor: default;
+}
+
+.shop-card.maxed {
+  border-color: rgb(255 211 77 / 60%);
+}
+
+.shop-icon {
+  font-size: 26px;
+}
+
+.shop-name {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.shop-text {
+  min-height: 30px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.shop-dots {
+  display: flex;
+  gap: 4px;
+}
+
+.shop-dots .dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: rgb(255 255 255 / 15%);
+}
+
+.shop-dots .dot.on {
+  background: #ffd34d;
+  box-shadow: 0 0 6px rgb(255 211 77 / 70%);
+}
+
+.shop-cost {
+  margin-top: 2px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: rgb(0 0 0 / 30%);
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.shop-card:disabled:not(.maxed) .shop-cost {
+  opacity: 0.45;
+}
+
+@media (max-width: 600px), (max-height: 500px) {
+  .hero-card {
+    padding: 5px 8px;
+  }
+
+  .hero-name {
+    font-size: 15px;
+  }
+
+  .hero-passive {
+    font-size: 11px;
+  }
+
+  .shop-grid {
+    grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+    gap: 6px;
+  }
+
+  .shop-text {
+    font-size: 11px;
   }
 }

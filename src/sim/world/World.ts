@@ -58,6 +58,7 @@ import {
   PickupPool,
 } from '../pickups/PickupPool';
 import { Player, type PlayerInput } from '../player/Player';
+import { applyLoadout, type RunLoadout } from '../progression/Loadout';
 import { type Rarity, rarityMult, rollRarity } from '../progression/Rarity';
 import {
   ESSENCE_DAMAGE,
@@ -89,7 +90,10 @@ export interface WorldOptions {
   /** Aynı anda en fazla kaç düşman (masaüstü/mobil farklı). */
   enemyCap?: number;
   godMode?: boolean;
+  /** Başlangıç silahı (verilmezse kahramanınki, o da yoksa Büyü Oku). */
   startWeapon?: string;
+  /** Kahraman ve kalıcı güçler. */
+  loadout?: RunLoadout;
 }
 
 /** Sandıktan çıkan bir eşya. */
@@ -336,9 +340,11 @@ export class World {
     this.enemyGrid = new SpatialGrid(A.size, 4, this.enemies.capacity);
     this.director = new SpawnDirector(this.rng);
 
+    const heroWeapon = opts.loadout ? applyLoadout(this, opts.loadout) : undefined;
     this.player.y = this.terrain.heightAt(0, 0);
     this.player.maxHp = this.player.hp = this.stats.get('maxHp');
-    this.weapons.push(createWeapon(WEAPONS[WEAPON_INDEX[opts.startWeapon ?? 'magicBolt']]));
+    const start = WEAPON_INDEX[opts.startWeapon ?? heroWeapon ?? 'magicBolt'] ?? WEAPON_INDEX.magicBolt;
+    this.weapons.push(createWeapon(WEAPONS[start]));
   }
 
   /** Silah yuvasının evrim imzası (yuva yoksa ya da evrimleşmediyse undefined). */
