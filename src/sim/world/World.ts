@@ -17,10 +17,24 @@ import { ITEM_FX, ITEM_INDEX, ITEMS } from '../../data/items';
 import { ALTAR, CAULDRON } from '../../data/landmarks';
 import { TOME_INDEX, TOMES, tomeValue } from '../../data/tomes';
 import { TORCH, TORCH_DROPS, type TorchDrop, torchDropWeights } from '../../data/torches';
-import { WEAPON_INDEX, WEAPONS, type WeaponBehavior, weaponMaxLevel } from '../../data/weapons';
+import {
+  WEAPON_INDEX,
+  WEAPONS,
+  type WeaponBehavior,
+  type WeaponSignature,
+  weaponMaxLevel,
+} from '../../data/weapons';
 import { Blasts } from '../combat/Blasts';
 import { Hazards, HZF_VISUAL } from '../combat/Hazards';
-import { PF_GROUND_FOLLOW, PF_RETURNING, PF_RETURNS, ProjectilePool } from '../combat/ProjectilePool';
+import {
+  PF_CHILD,
+  PF_GROUND_FOLLOW,
+  PF_RETURNING,
+  PF_RETURNS,
+  PF_WHIRLED,
+  PROJ_BOLT,
+  ProjectilePool,
+} from '../combat/ProjectilePool';
 import { BossController } from '../enemies/Bosses';
 import {
   EF_BOSS,
@@ -126,9 +140,13 @@ export interface ProjectileSpawn {
   knockback: number;
   homing?: number;
   flags?: number;
+  /** Atış sesi/olayı yazılmaz (bölünen yavru mermiler). */
+  silent?: boolean;
 }
 
 const PB = BALANCE.player;
+/** Geri itilme hızının sönüm katsayısı (1/s): v hızı yaklaşık v/KNOCK_DECAY m yol aldırır. */
+const KNOCK_DECAY = 7;
 const XB = BALANCE.xp;
 
 /** pulseFx türleri: yayılan halka efektinin rengi. */
@@ -137,6 +155,14 @@ export const PULSE_FREEZE = 1;
 export const PULSE_HOLY = 2;
 export const PULSE_PHOENIX = 3;
 export const PULSE_BLOOD = 4;
+/** Evrim imzaları: Ruh Emme (can emme) ve Kara Delik (çekim). */
+export const PULSE_DRAIN = 5;
+export const PULSE_VOID = 6;
+
+/** hitFx 5. alanı: 0 normal · 1 kritik · 2 infaz · 3 yanık tiki. */
+export const HIT_CRIT = 1;
+export const HIT_EXECUTE = 2;
+export const HIT_BURN = 3;
 /** Kan Ayı doğunca bu yarıçaptaki sıradan düşmanlar silinir. */
 const BLOOD_MOON_PURGE = 45;
 /** collectFx türü: XP taşı (pickup'lar 1 + PICKUP_* olarak yazılır). */
@@ -247,6 +273,8 @@ export class World {
   outcome: RunOutcome | null = null;
   /** Hata ayıklama hilesi kullanıldı (rekor ve gümüş sayılmaz). */
   cheated = false;
+  /** Yanık tiki işlenirken: imzalar yeniden tetiklenmez. */
+  private procGuard = false;
   /** Sandık/sunak ödülü: doluysa oyun durur, oyuncu alır. */
   reward: Reward | null = null;
   /** Sıradaki ödüller (ör. boss sandığında önce evrim, sonra eşyalar). */
@@ -311,6 +339,11 @@ export class World {
     this.player.y = this.terrain.heightAt(0, 0);
     this.player.maxHp = this.player.hp = this.stats.get('maxHp');
     this.weapons.push(createWeapon(WEAPONS[WEAPON_INDEX[opts.startWeapon ?? 'magicBolt']]));
+  }
+
+  /** Silah yuvasının evrim imzası (yuva yoksa ya da evrimleşmediyse undefined). */
+  sigOf(src: number): WeaponSignature | undefined {
+    return src >= 0 ? this.weapons[src]?.def.signature : undefined;
   }
 
   /** Koşuyu bitirir (zaferle ya da menüye dönerek); ölüm sim içinde olur. */
@@ -881,12 +914,24 @@ export class World {
     const p = this.player;
     const buf = this.buf;
     const tmp = this.tmp2;
-    const knockDecay = Math.exp(-7 * dt);
+    const knockDecay = Math.exp(-KNOCK_DECAY * dt);
     const pr = PB.radius;
     let maxRadius = 0;
 
     for (let i = 0; i < e.count; i++) {
       if (e.dead[i]) continue;
+      if (e.burn[i] > 0) {
+        // Yanık: 0,25 sn'de bir tik (düşmanlar farklı karelerde yanar).
+        e.burn[i] -= dt;
+        if ((this.tick + e.uid[i]) % 15 === 0) {
+          this.procGuard = true;
+          this.dmgSrc = e.burnSrc[i];
+          this.damageEnemy(i, e.burnDps[i] * 0.25, 0, 0);
+          this.dmgSrc = -1;
+          this.procGuard = false;
+          if (e.dead[i]) continue;
+        }
+      }
       if (e.radius[i] > maxRadius) maxRadius = e.radius[i];
       const def = ENEMIES[e.type[i]];
       e.contactCd[i] -= dt;
@@ -1122,7 +1167,24 @@ export class World {
     e.kz[i] += kz * k;
     this.damageDealt += dmg;
     this.run.addDamage(this.dmgSrc, dmg);
-    this.hitFx.push(e.x[i], e.y[i] + e.hover[i] + 1, e.z[i], dmg, crit ? 1 : 0);
+    const code = this.procGuard ? HIT_BURN : crit ? HIT_CRIT : 0;
+    this.hitFx.push(e.x[i], e.y[i] + e.hover[i] + 1, e.z[i], dmg, code);
+    // Evrim imzaları: infaz ve yanık.
+    const sig = this.procGuard ? undefined : this.sigOf(this.dmgSrc);
+    if (sig && e.hp[i] > 0) {
+      if (sig.kind === 'execute' && !(e.flags[i] & EF_BOSS) && e.hp[i] < e.maxHp[i] * sig.threshold) {
+        const rest = e.hp[i];
+        e.hp[i] = 0;
+        this.damageDealt += rest;
+        this.run.addDamage(this.dmgSrc, rest);
+        this.hitFx.push(e.x[i], e.y[i] + e.hover[i] + 1.4, e.z[i], rest, HIT_EXECUTE);
+        this.heal(sig.heal);
+      } else if (sig.kind === 'burn') {
+        e.burn[i] = sig.time;
+        e.burnDps[i] = base * sig.dpsMul;
+        e.burnSrc[i] = this.dmgSrc;
+      }
+    }
     if (e.hp[i] <= 0) {
       this.killEnemy(i);
       return;
@@ -1311,10 +1373,12 @@ export class World {
   }
 
   /** Bir küre içindeki tüm düşmanlara hasar (aura, patlama). */
-  damageInRadius(x: number, y: number, z: number, r: number, base: number, knock: number): void {
+  /** r yarıçaptaki düşmanlara hasar; vurulan düşman sayısını döner. */
+  damageInRadius(x: number, y: number, z: number, r: number, base: number, knock: number): number {
     if (this.torches.count > 0) this.hitTorches(x, z, r);
     const e = this.enemies;
     const n = this.enemyGrid.query(x, z, r + Math.max(1, this.hitPad), this.buf);
+    let hits = 0;
     for (let k = 0; k < n; k++) {
       const j = this.buf[k];
       if (j >= e.count || e.dead[j]) continue;
@@ -1325,6 +1389,28 @@ export class World {
       if (d2 > rr * rr || !this.verticalHit(j, y, 2.5)) continue;
       const d = Math.sqrt(d2) || 1e-4;
       this.damageEnemy(j, base, (dx / d) * knock, (dz / d) * knock);
+      hits++;
+    }
+    return hits;
+  }
+
+  /**
+   * Kara Delik: r içindeki düşmanları (boss hariç) merkeze doğru en fazla `strength` m çeker
+   * (geri itilme hızı olarak; sönümle yaklaşık o kadar yol alırlar).
+   */
+  pullEnemies(x: number, z: number, r: number, strength: number): void {
+    const e = this.enemies;
+    const n = this.enemyGrid.query(x, z, r, this.buf);
+    for (let k = 0; k < n; k++) {
+      const j = this.buf[k];
+      if (j >= e.count || e.dead[j] || e.flags[j] & EF_BOSS) continue;
+      const dx = x - e.x[j];
+      const dz = z - e.z[j];
+      const d = Math.hypot(dx, dz);
+      if (d > r || d < 0.3) continue;
+      const v = ((1 - e.knockResist[j]) * Math.min(d, strength) * KNOCK_DECAY) / d;
+      e.kx[j] += dx * v;
+      e.kz[j] += dz * v;
     }
   }
 
@@ -1371,7 +1457,7 @@ export class World {
     const pr = this.projectiles;
     const i = pr.add();
     if (i < 0) return;
-    this.shotFx.push(o.x, o.y, o.z, o.kind);
+    if (!o.silent) this.shotFx.push(o.x, o.y, o.z, o.kind);
     pr.kind[i] = o.kind;
     pr.x[i] = o.x;
     pr.y[i] = o.y;
@@ -1387,6 +1473,36 @@ export class World {
     pr.homing[i] = o.homing ?? 0;
     pr.flags[i] = o.flags ?? 0;
     pr.src[i] = this.dmgSrc;
+  }
+
+  /** Işık Bölünmesi: öldüren mermi, düşmanın yerinden yelpaze gibi yavru mermilere bölünür. */
+  private splitBolt(i: number, j: number): void {
+    const sig = this.sigOf(this.projectiles.src[i]);
+    const pr = this.projectiles;
+    if (sig?.kind !== 'split' || pr.count > pr.capacity - 64) return;
+    const e = this.enemies;
+    const speed = Math.hypot(pr.vx[i], pr.vz[i]) || 1;
+    const base = Math.atan2(pr.vx[i], pr.vz[i]);
+    for (let k = 0; k < sig.count; k++) {
+      const a = base + (sig.count === 1 ? 0 : (k / (sig.count - 1) - 0.5) * 2 * sig.spread);
+      this.spawnProjectile({
+        kind: PROJ_BOLT,
+        x: e.x[j],
+        y: pr.y[i],
+        z: e.z[j],
+        vx: Math.sin(a) * speed,
+        vy: 0,
+        vz: Math.cos(a) * speed,
+        life: 0.9,
+        damage: pr.damage[i] * sig.damageMul,
+        radius: pr.radius[i] * 0.75,
+        pierce: 1,
+        knockback: pr.knockback[i] * 0.5,
+        homing: 5,
+        flags: PF_CHILD,
+        silent: true,
+      });
+    }
   }
 
   /** Gecikmeli patlama (Havan; eşyalar `src = −1` verir). */
@@ -1520,8 +1636,16 @@ export class World {
       const fl = pr.flags[i];
       if (fl & PF_RETURNS) {
         if (!(fl & PF_RETURNING) && pr.life[i] < pr.maxLife[i] * 0.5) {
-          pr.flags[i] |= PF_RETURNING;
-          pr.hitCount[i] = 0;
+          const sig = this.sigOf(pr.src[i]);
+          if (sig?.kind === 'whirl' && !(fl & PF_WHIRLED)) {
+            // Girdap: dönmeden önce yerinde döner (ömür o kadar uzar).
+            pr.flags[i] |= PF_WHIRLED;
+            pr.aux[i] = sig.time;
+            pr.life[i] += sig.time;
+          } else if (pr.aux[i] <= 0) {
+            pr.flags[i] |= PF_RETURNING;
+            pr.hitCount[i] = 0;
+          }
         }
         if (pr.flags[i] & PF_RETURNING) {
           const p = this.player;
@@ -1538,8 +1662,17 @@ export class World {
         }
       }
 
-      pr.x[i] += pr.vx[i] * dt;
-      pr.z[i] += pr.vz[i] * dt;
+      if (pr.aux[i] > 0) {
+        // Girdapta: yerinde kalır, belirli aralıkla aynı düşmanlara yeniden vurabilir.
+        const sig = this.sigOf(pr.src[i]);
+        const rehit = sig?.kind === 'whirl' ? sig.rehit : 0.2;
+        const before = Math.ceil(pr.aux[i] / rehit);
+        pr.aux[i] -= dt;
+        if (Math.ceil(pr.aux[i] / rehit) !== before) pr.hitCount[i] = 0;
+      } else {
+        pr.x[i] += pr.vx[i] * dt;
+        pr.z[i] += pr.vz[i] * dt;
+      }
       const ground = this.terrain.heightAt(pr.x[i], pr.z[i]);
       if (fl & PF_GROUND_FOLLOW) {
         // Göğüs hizasında araziyi takip et (tepelere çarpıp kaybolmasın).
@@ -1571,6 +1704,7 @@ export class World {
         const kb = pr.knockback[i];
         this.dmgSrc = pr.src[i];
         this.damageEnemy(j, pr.damage[i], (pr.vx[i] / sp) * kb, (pr.vz[i] / sp) * kb);
+        if (e.dead[j] && pr.kind[i] === PROJ_BOLT && !(pr.flags[i] & PF_CHILD)) this.splitBolt(i, j);
         this.dmgSrc = -1;
         pr.pierceLeft[i]--;
         if (pr.pierceLeft[i] === 0) {

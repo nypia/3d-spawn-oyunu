@@ -7,7 +7,7 @@ import {
   PlaneGeometry,
   ShaderMaterial,
 } from 'three';
-import type { World } from '../sim/world/World';
+import { HIT_BURN, HIT_CRIT, HIT_EXECUTE, type World } from '../sim/world/World';
 
 const MAX_NUMBERS = 90;
 /** Bir karede eklenebilecek en fazla yeni sayı (kalabalıkta okunabilirlik). */
@@ -22,6 +22,8 @@ interface DamageNumber {
   z: number;
   text: string;
   crit: boolean;
+  /** hitFx kodu (HIT_*): renk seçimi. */
+  code: number;
   t: number;
 }
 
@@ -150,7 +152,9 @@ export class DamageNumbers {
     this.cursor = world.hitFx.drain(this.cursor, (d, o) => {
       if (!this.enabled) return;
       const idx = seen++;
-      const crit = d[o + 4] > 0;
+      const code = d[o + 4];
+      // Kritik ve infaz her zaman gösterilir; yanık tikleri küçük ve turuncu.
+      const crit = code === HIT_CRIT || code === HIT_EXECUTE;
       if (!crit && idx < next) return;
       next = idx + stride;
       if (this.list.length >= MAX_NUMBERS) this.list.shift();
@@ -161,6 +165,7 @@ export class DamageNumbers {
         z: d[o + 2] + (Math.random() - 0.5) * 0.6,
         text: String(Math.min(99999, value)),
         crit,
+        code,
         t: 0,
       });
     });
@@ -176,7 +181,7 @@ export class DamageNumbers {
       const u = n.t / LIFE;
       const rise = 1.2 * (1 - (1 - u) * (1 - u));
       const pop = n.t < 0.1 ? 1.35 - n.t * 3.5 : 1;
-      const s = (n.crit ? 0.52 : 0.34) * pop;
+      const s = (n.crit ? 0.52 : n.code === HIT_BURN ? 0.26 : 0.34) * pop;
       const a = u < 0.6 ? 1 : 1 - (u - 0.6) / 0.4;
       const len = n.text.length;
       for (let c = 0; c < len; c++) {
@@ -187,7 +192,15 @@ export class DamageNumbers {
         this.offset[k] = c - (len - 1) / 2;
         this.scale[k] = s;
         this.alpha[k] = a;
-        if (n.crit) {
+        if (n.code === HIT_EXECUTE) {
+          this.color[k * 3] = 1;
+          this.color[k * 3 + 1] = 0.22;
+          this.color[k * 3 + 2] = 0.24;
+        } else if (n.code === HIT_BURN) {
+          this.color[k * 3] = 1;
+          this.color[k * 3 + 1] = 0.55;
+          this.color[k * 3 + 2] = 0.15;
+        } else if (n.crit) {
           this.color[k * 3] = 1;
           this.color[k * 3 + 1] = 0.82;
           this.color[k * 3 + 2] = 0.25;

@@ -50,6 +50,27 @@ export interface WeaponLevelDelta {
   pierce?: number;
 }
 
+/**
+ * Evrim imzası: evrimleşmiş silahın davranışını değiştiren özellik (yalnızca sayı büyütmez).
+ *  - split: öldüren mermi `count` küçük ışığa bölünür (yavrular bölünmez)
+ *  - drain: hale tiki vurduğu düşman başına can emer (tik başına üst sınır)
+ *  - execute: canı eşiğin altına düşen (boss olmayan) düşman anında ölür, +can
+ *  - breathe: yörünge yarıçapı `period` sn'de 1×→(1+amp)× salınır
+ *  - whirl: balta en uzak noktada `time` sn durup döner, `rehit` sn'de bir yeniden vurur
+ *  - skyStrike: her sekmede (şansla artan) olasılıkla gökten yıldırım
+ *  - pull: meteor düşmeden önce çevresini merkeze çeker (boss'lar etkilenmez)
+ *  - burn: isabet `time` sn yakar (saniyede taban hasarın `dpsMul` katı, yığılmaz)
+ */
+export type WeaponSignature =
+  | { kind: 'split'; count: number; damageMul: number; spread: number }
+  | { kind: 'drain'; perHit: number; maxPerTick: number }
+  | { kind: 'execute'; threshold: number; heal: number }
+  | { kind: 'breathe'; amp: number; period: number }
+  | { kind: 'whirl'; time: number; rehit: number }
+  | { kind: 'skyStrike'; chance: number; luckMul: number; radius: number; damageMul: number }
+  | { kind: 'pull'; radiusMul: number; strength: number }
+  | { kind: 'burn'; time: number; dpsMul: number };
+
 export interface WeaponDef {
   id: string;
   name: string;
@@ -62,6 +83,10 @@ export interface WeaponDef {
   evolvesFrom?: string;
   /** Evrimleşmiş silahın efekt rengi. */
   tint?: number;
+  /** Evrim imzası, adı ve açıklaması. */
+  signature?: WeaponSignature;
+  signatureName?: string;
+  signatureText?: string;
 }
 
 export const WEAPONS: readonly WeaponDef[] = [

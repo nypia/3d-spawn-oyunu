@@ -187,7 +187,13 @@ export class Hud {
     if (key !== this.lastLoadoutKey) {
       this.lastLoadoutKey = key;
       const weapons = world.weapons.map((w) => {
-        if (w.def.evolvesFrom) return slot(w.def.icon, '★', w.def.name, 'evolved');
+        if (w.def.evolvesFrom)
+          return slot(
+            w.def.icon,
+            '★',
+            `${w.def.name} — ★ ${w.def.signatureName}: ${w.def.signatureText}`,
+            'evolved',
+          );
         if (world.canEvolve(w))
           return slot(w.def.icon, w.level, `${w.def.name}: evrime hazır, sandık aç!`, 'ready');
         return slot(w.def.icon, w.level, w.def.name);

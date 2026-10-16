@@ -17,6 +17,7 @@ import { GOBLIN_DEATH, GOBLIN_DROP } from '../sim/world/Landmarks';
 import { TORCH_FX } from '../sim/world/Torches';
 import {
   COLLECT_GEM,
+  HIT_BURN,
   PULSE_FREEZE,
   PULSE_HOLY,
   PULSE_MAGNET,
@@ -120,7 +121,10 @@ export class SoundEvents {
     const p = w.player;
 
     this.hit = w.hitFx.drain(this.hit, (d, o) => {
-      if (d[o + 4]) a.play('crit', { x: d[o], z: d[o + 2], rate: rand(0.95, 1.1) });
+      const code = d[o + 4];
+      // Yanık tikleri sessiz (sürekli vuruş sesi olmasın).
+      if (code === HIT_BURN) return;
+      if (code) a.play('crit', { x: d[o], z: d[o + 2], rate: rand(0.95, 1.1) });
       else a.play(Math.random() < 0.5 ? 'hit1' : 'hit2', { x: d[o], z: d[o + 2], rate: rand(0.85, 1.2) });
     });
     this.death = w.deathFx.drain(this.death, (d, o) => {

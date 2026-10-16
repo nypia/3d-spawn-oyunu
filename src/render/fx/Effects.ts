@@ -14,7 +14,7 @@ import {
 import { ALTAR, CAULDRON, CHEST, VASE } from '../../sim/world/Interactables';
 import { GOBLIN_DEATH, GOBLIN_DROP } from '../../sim/world/Landmarks';
 import { TORCH_FX } from '../../sim/world/Torches';
-import { COLLECT_GEM, type World } from '../../sim/world/World';
+import { COLLECT_GEM, HIT_BURN, HIT_EXECUTE, type World } from '../../sim/world/World';
 import type { GameAssets } from '../assets/loadAssets';
 import { texturedModel } from '../assets/staticModels';
 import type { PulseFx } from '../PulseFx';
@@ -104,6 +104,7 @@ export class Effects {
   private wasGrounded = true;
   private airborne = 0;
   private dustTimer = 0;
+  private burnTimer = 0;
   private emberTimer = 0;
 
   constructor(
@@ -163,6 +164,7 @@ export class Effects {
     this.drainEvents(world);
     this.levelUp(world);
     if (live) this.heroDust(world, dt);
+    this.burning(world, dt);
     this.torches(world, dt, time);
     this.projectiles(world);
     this.pickupHalos(world, time);
@@ -322,9 +324,14 @@ export class Effects {
     let hits = 0;
     this.hitCursor = world.hitFx.drain(this.hitCursor, (d, o) => {
       if (hits++ >= MAX_HITS) return;
-      const crit = d[o + 4] > 0;
+      const code = d[o + 4];
       const y = d[o + 1] - 0.5;
-      if (crit) {
+      if (code === HIT_BURN) {
+        this.sparks(d[o], y, d[o + 2], 2, 0xff6a1a, 1.6, 4, 0.12, 0.3);
+      } else if (code === HIT_EXECUTE) {
+        this.sparks(d[o], y + 0.3, d[o + 2], 10, 0xff2b3d, 3.6, 10, 0.2, 0.4);
+        this.flash(d[o], y + 0.3, d[o + 2], 1.4, 0xff4050, 3, 0.14);
+      } else if (code) {
         this.sparks(d[o], y, d[o + 2], 6, 0xffa23d, 3.2, 9, 0.2, 0.32);
         this.flash(d[o], y, d[o + 2], 0.9, 0xffd27a, 2.5, 0.1);
       } else {
@@ -621,6 +628,21 @@ export class Effects {
       0.6,
       0.6,
     );
+  }
+
+  /** Ejderha Nefesi yanığı: yanan düşmanlardan yükselen korlar (en fazla 48 düşman). */
+  private burning(world: World, dt: number): void {
+    this.burnTimer -= dt;
+    if (this.burnTimer > 0) return;
+    this.burnTimer = 0.12;
+    const e = world.enemies;
+    let n = 0;
+    for (let i = 0; i < e.count && n < 48; i++) {
+      if (e.dead[i] || e.burn[i] <= 0) continue;
+      n++;
+      const y = e.y[i] + e.hover[i] + e.height[i] * 0.6;
+      this.sparks(e.x[i], y, e.z[i], 1, 0xff7a1a, 1.2, 2.5, 0.14, 0.5);
+    }
   }
 
   /** Meşale korları ve alev parıltısı. */

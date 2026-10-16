@@ -55,6 +55,10 @@ export class EnemyPool {
   /** Davranışa özel yön/değer (atılma yönü, goblinin altın eşiği…). */
   readonly ax: Float32Array;
   readonly az: Float32Array;
+  /** Yanık (Ejderha Nefesi imzası): kalan süre, saniyelik ham hasar ve kaynak silah yuvası. */
+  readonly burn: Float32Array;
+  readonly burnDps: Float32Array;
+  readonly burnSrc: Int8Array;
   readonly type: Uint8Array;
   /** ST_* durum makinesi (atılan, menzilli, boss). */
   readonly state: Uint8Array;
@@ -92,6 +96,9 @@ export class EnemyPool {
     this.travel = f();
     this.ax = f();
     this.az = f();
+    this.burn = f();
+    this.burnDps = f();
+    this.burnSrc = new Int8Array(capacity);
     this.type = new Uint8Array(capacity);
     this.state = new Uint8Array(capacity);
     this.flags = new Uint8Array(capacity);
@@ -119,6 +126,9 @@ export class EnemyPool {
     this.travel[i] = 0;
     this.ax[i] = 0;
     this.az[i] = 0;
+    this.burn[i] = 0;
+    this.burnDps[i] = 0;
+    this.burnSrc[i] = -1;
     this.state[i] = 0;
     this.flags[i] = 0;
     this.elite[i] = 0;
@@ -131,7 +141,7 @@ export class EnemyPool {
     }
   }
 
-  private removeAt(i: number): void {
+  removeAt(i: number): void {
     const last = --this.count;
     if (i === last) return;
     this.x[i] = this.x[last];
@@ -159,6 +169,9 @@ export class EnemyPool {
     this.travel[i] = this.travel[last];
     this.ax[i] = this.ax[last];
     this.az[i] = this.az[last];
+    this.burn[i] = this.burn[last];
+    this.burnDps[i] = this.burnDps[last];
+    this.burnSrc[i] = this.burnSrc[last];
     this.type[i] = this.type[last];
     this.state[i] = this.state[last];
     this.flags[i] = this.flags[last];

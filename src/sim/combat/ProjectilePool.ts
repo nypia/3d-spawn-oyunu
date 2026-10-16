@@ -10,6 +10,10 @@ export const PROJ_PELLET = 2;
 export const PF_GROUND_FOLLOW = 1;
 export const PF_RETURNS = 2;
 export const PF_RETURNING = 4;
+/** Bölünmeden doğan yavru mermi (bir daha bölünmez). */
+export const PF_CHILD = 8;
+/** Girdap dönüşünü yaptı (bir kez). */
+export const PF_WHIRLED = 16;
 
 export class ProjectilePool {
   readonly capacity: number;
@@ -34,6 +38,8 @@ export class ProjectilePool {
   readonly flags: Uint8Array;
   /** Hasar kaynağı: atan silahın yuvası (−1 = diğer). */
   readonly src: Int8Array;
+  /** Davranışa özel sayaç (girdap: kalan dönüş süresi). */
+  readonly aux: Float32Array;
   readonly dead: Uint8Array;
   readonly hitCount: Uint8Array;
   readonly hitUids: Int32Array;
@@ -57,6 +63,7 @@ export class ProjectilePool {
     this.kind = new Uint8Array(capacity);
     this.flags = new Uint8Array(capacity);
     this.src = new Int8Array(capacity);
+    this.aux = f();
     this.dead = new Uint8Array(capacity);
     this.hitCount = new Uint8Array(capacity);
     this.hitUids = new Int32Array(capacity * HIT_SLOTS);
@@ -69,6 +76,7 @@ export class ProjectilePool {
     this.hitCount[i] = 0;
     this.flags[i] = 0;
     this.src[i] = -1;
+    this.aux[i] = 0;
     return i;
   }
 
@@ -111,6 +119,7 @@ export class ProjectilePool {
     this.kind[i] = this.kind[last];
     this.flags[i] = this.flags[last];
     this.src[i] = this.src[last];
+    this.aux[i] = this.aux[last];
     this.dead[i] = this.dead[last];
     this.hitCount[i] = this.hitCount[last];
     this.hitUids.copyWithin(i * HIT_SLOTS, last * HIT_SLOTS, (last + 1) * HIT_SLOTS);

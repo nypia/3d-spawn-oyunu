@@ -536,6 +536,7 @@ export class Game {
           icon: evo.def.icon,
           name: evo.def.name,
           description: evo.def.description,
+          signature: `★ ${evo.def.signatureName}: ${evo.def.signatureText}`,
         },
         () => this.takeReward(0),
       );

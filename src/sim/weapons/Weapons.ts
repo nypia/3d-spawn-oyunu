@@ -1,7 +1,7 @@
 import { ITEM_FX, ITEM_INDEX } from '../../data/items';
 import type { WeaponDef, WeaponLevelDelta, WeaponStats } from '../../data/weapons';
 import { PF_GROUND_FOLLOW, PF_RETURNS, PROJ_AXE, PROJ_BOLT, PROJ_PELLET } from '../combat/ProjectilePool';
-import type { World } from '../world/World';
+import { PULSE_DRAIN, PULSE_VOID, type World } from '../world/World';
 
 export interface AppliedDelta {
   delta: WeaponLevelDelta;
@@ -65,9 +65,15 @@ export function weaponCount(world: World, w: WeaponInstance): number {
   return Math.max(1, Math.round(w.stats.count + world.stats.get('projectileCount')));
 }
 
-/** Yörünge taşlarının yarıçapı (render da aynı formülü kullanır). */
+/**
+ * Yörünge taşlarının yarıçapı (render da aynı formülü kullanır). Nefes Alan Yörünge imzasında
+ * yarıçap `period` sn'de 1× ile (1+amp)× arasında salınır.
+ */
 export function orbitRadius(world: World, w: WeaponInstance): number {
-  return w.stats.area * world.stats.get('area');
+  const r = w.stats.area * world.stats.get('area');
+  const sig = w.def.signature;
+  if (sig?.kind !== 'breathe') return r;
+  return r * (1 + sig.amp * (0.5 - 0.5 * Math.cos((world.time * Math.PI * 2) / sig.period)));
 }
 
 export function updateWeapon(world: World, w: WeaponInstance, dt: number): void {
@@ -132,7 +138,16 @@ function fire(world: World, w: WeaponInstance): boolean {
 
     case 'aura': {
       world.auraRadius = s.area * st.get('area');
-      world.damageInRadius(p.x, p.y, p.z, world.auraRadius, s.damage, s.knockback);
+      const hits = world.damageInRadius(p.x, p.y, p.z, world.auraRadius, s.damage, s.knockback);
+      const sig = w.def.signature;
+      if (sig?.kind === 'drain' && hits > 0) {
+        // Ruh Emme: vurulan düşman başına can; görsel halka en fazla 1,5 sn'de bir.
+        world.heal(Math.min(sig.maxPerTick, hits * sig.perHit));
+        if ((w.phase <= 0 || world.time - w.phase > 1.5) && p.hp < p.maxHp) {
+          w.phase = world.time;
+          world.pulseFx.push(p.x, p.y, p.z, world.auraRadius, PULSE_DRAIN);
+        }
+      }
       return true;
     }
 
@@ -207,6 +222,15 @@ function fire(world: World, w: WeaponInstance): boolean {
         const kz = e.z[cur] - fz;
         const kl = Math.hypot(kx, kz) || 1;
         world.damageEnemy(cur, s.damage, (kx / kl) * s.knockback, (kz / kl) * s.knockback);
+        const sig = w.def.signature;
+        if (sig?.kind === 'skyStrike') {
+          // Gök Gürültüsü: şansla artan olasılıkla gökten yıldırım (çevresine alan hasarı).
+          const chance = Math.min(0.9, sig.chance + st.get('luck') * sig.luckMul);
+          if (world.rng.chance(chance)) {
+            world.beamFx.push(e.x[cur], ty + 14, e.z[cur], e.x[cur], ty - 0.6, e.z[cur]);
+            world.damageInRadius(e.x[cur], ty, e.z[cur], sig.radius, s.damage * sig.damageMul, 2);
+          }
+        }
         fx = e.x[cur];
         fy = ty;
         fz = e.z[cur];
@@ -239,9 +263,15 @@ function fire(world: World, w: WeaponInstance): boolean {
         scored.push({ i: c, n: world.countEnemiesNear(e.x[c], e.z[c], r) });
       }
       scored.sort((a, b) => b.n - a.n);
+      const sig = w.def.signature;
       for (let k = 0; k < count; k++) {
         const c = scored[k].i;
-        world.addBlast(e.x[c], e.z[c], r, s.damage, s.knockback, s.duration);
+        if (sig?.kind === 'pull') {
+          // Kara Delik: düşmeden önce çevreyi çukura çeker; patlama dışarı itmez.
+          world.pullEnemies(e.x[c], e.z[c], r * sig.radiusMul, sig.strength);
+          world.pulseFx.push(e.x[c], e.y[c], e.z[c], r * sig.radiusMul, PULSE_VOID);
+          world.addBlast(e.x[c], e.z[c], r, s.damage, 0, s.duration);
+        } else world.addBlast(e.x[c], e.z[c], r, s.damage, s.knockback, s.duration);
       }
       return true;
     }

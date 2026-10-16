@@ -21,6 +21,8 @@ export interface EvolutionView {
   icon: string;
   name: string;
   description: string;
+  /** İmza: "★ Işık Bölünmesi: Öldüren mermi…" */
+  signature?: string;
 }
 
 export type GuideTab = 'items' | 'evolutions';
@@ -279,6 +281,7 @@ export class Screens {
       h('span.card-icon', {}, view.icon),
       h('span.card-title', {}, view.name),
       h('span.card-desc', {}, view.description),
+      view.signature ? h('span.card-hint.evo-signature', {}, view.signature) : '',
       h('span.card-badge', {}, `★ ${view.fromName} evrimleşiyor`),
     );
     const host = h('div.evo-stage', {}, card);
@@ -544,7 +547,7 @@ function evolutionGuide(world: World): HTMLElement {
     return guideRow(
       `${base.icon}→${evo.def.icon}`,
       evo.def.name,
-      `${base.name} (Sv. ${weaponMaxLevel(base)}) + ${tome.icon} ${tome.name}`,
+      `${base.name} (Sv. ${weaponMaxLevel(base)}) + ${tome.icon} ${tome.name} · ★ ${evo.def.signatureName}: ${evo.def.signatureText}`,
       evolved ? '✓' : ready ? 'Hazır!' : '',
       evolved || ready,
       true,
