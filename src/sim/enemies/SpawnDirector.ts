@@ -9,6 +9,12 @@ import { EF_BOSS, EF_SPECIAL } from './EnemyPool';
 
 const S = BALANCE.spawn;
 
+/** `at` anından itibaren ilk olayın indeksi (yoksa liste sonu). */
+function firstEventFrom(at: number): number {
+  const i = WAVE_EVENTS.findIndex((e) => e.at >= at);
+  return i < 0 ? WAVE_EVENTS.length : i;
+}
+
 /**
  * Zaman çizelgeli spawn direktörü:
  *  - Çizelge (data/waves) hangi türün ne oranda doğacağını belirler; türler zamanla katılır ve
@@ -23,6 +29,8 @@ export class SpawnDirector {
   /** Kredisi biriktirilen sıradaki tür (−1 = seçilmedi). */
   pending = -1;
   eventCursor = 0;
+  /** Olay listesinin kaçıncı geçişi (0 = ilk; çizelge 20:00'ı geçince artar). */
+  eventLoop = 0;
   nextElite: number = ELITE.interval;
   /** Bu zamana kadar normal spawn yok (Kan Ayı başlangıcı). */
   calmUntil = 0;
@@ -32,14 +40,25 @@ export class SpawnDirector {
 
   constructor(private readonly rng: Rng) {}
 
-  /**
-   * Çizelge zamanı: 1. döngüde gerçek zaman; Kan Ayı'nda sakinlik bitince 8:00'dan hızlı tekrar
-   * (en fazla 20:00).
-   */
-  timelineTime(world: World): number {
-    if (world.cycle <= 1) return Math.min(CYCLE.length, world.time);
+  /** Tavansız çizelge zamanı: 1. döngüde gerçek zaman; Kan Ayı'nda sakinlik bitince 8:00'dan hızlı. */
+  rawTimeline(world: World): number {
+    if (world.cycle <= 1) return world.time;
     const t = Math.max(0, world.time - world.cycleStart - CYCLE.calm);
-    return Math.min(CYCLE.length, CYCLE.timelineStart + t * CYCLE.pace);
+    return CYCLE.timelineStart + t * CYCLE.pace;
+  }
+
+  /** Spawn karışımının çizelge zamanı (en fazla 20:00: son karışım sürer). */
+  timelineTime(world: World): number {
+    return Math.min(CYCLE.length, this.rawTimeline(world));
+  }
+
+  /** Olay saati ve geçiş sayısı: ham çizelge 20:00'ı geçince olaylar 8:00–20:00 arasını tekrar oynar. */
+  eventClock(raw: number): [time: number, loop: number] {
+    if (raw < CYCLE.length) return [raw, 0];
+    const span = CYCLE.length - CYCLE.loopFrom;
+    const over = raw - CYCLE.length;
+    const loop = Math.floor(over / span) + 1;
+    return [CYCLE.loopFrom + over - (loop - 1) * span, loop];
   }
 
   creditRate(tl: number): number {
@@ -70,7 +89,8 @@ export class SpawnDirector {
   update(world: World, dt: number): void {
     const t = world.time;
     const c = world.cycle;
-    const tl = this.timelineTime(world);
+    const raw = this.rawTimeline(world);
+    const tl = Math.min(CYCLE.length, raw);
     waveWeights(tl, this.weights);
 
     const curse = 1 + Math.max(0, world.stats.get('curse'));
@@ -93,11 +113,16 @@ export class SpawnDirector {
       this.pending = this.rng.weightedIndex(this.weights);
     }
 
-    // Temalı olaylar (sakinlikte beklerler).
-    while (calm && this.eventCursor < WAVE_EVENTS.length && WAVE_EVENTS[this.eventCursor].at <= tl) {
+    // Temalı olaylar (sakinlikte beklerler); liste bitince 8:00'dan yeniden.
+    const [evTl, loop] = this.eventClock(raw);
+    if (loop !== this.eventLoop) {
+      this.eventLoop = loop;
+      this.eventCursor = firstEventFrom(CYCLE.loopFrom);
+    }
+    while (calm && this.eventCursor < WAVE_EVENTS.length && WAVE_EVENTS[this.eventCursor].at <= evTl) {
       const index = this.eventCursor++;
       const ev = WAVE_EVENTS[index];
-      if (tl - ev.at > S.staleEvent) continue;
+      if (evTl - ev.at > S.staleEvent) continue;
       this.fireEvent(world, ev, index);
     }
 
@@ -120,18 +145,19 @@ export class SpawnDirector {
 
   /** Kan Ayı: çizelge 8:00 karışımından yeniden başlar, kısa bir sakinlikten sonra. */
   startCycle(world: World): void {
-    this.eventCursor = WAVE_EVENTS.findIndex((e) => e.at >= CYCLE.timelineStart);
-    if (this.eventCursor < 0) this.eventCursor = WAVE_EVENTS.length;
+    this.eventCursor = firstEventFrom(CYCLE.timelineStart);
+    this.eventLoop = 0;
     this.calmUntil = world.time + CYCLE.calm;
     this.nextElite = world.time + 30;
     this.credit = 0;
     this.pending = -1;
   }
 
-  /** Olay sayısı Kan Ayı'nda ve lanetle büyür. */
+  /** Olay sayısı Kan Ayı'nda, her tekrar geçişinde ve lanetle büyür. */
   eventCount(world: World, ev: WaveEvent): number {
     const curse = Math.max(0, world.stats.get('curse'));
-    return Math.round(ev.count * CYCLE.eventCount ** (world.cycle - 1) * (1 + 0.5 * curse));
+    const scale = CYCLE.eventCount ** (world.cycle - 1) * CYCLE.loopEventCount ** this.eventLoop;
+    return Math.round(ev.count * scale * (1 + 0.5 * curse));
   }
 
   fireEvent(world: World, ev: WaveEvent, index: number): void {

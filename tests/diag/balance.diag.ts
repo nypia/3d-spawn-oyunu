@@ -19,7 +19,7 @@ it('denge raporu', () => {
       `   doğan: ${mix} · can×${w.director.hpMultiplier(w.time, w.cycle).toFixed(1)} · ${boss.join(' ')}`,
     );
     console.log(
-      `${Math.round(w.time / 60)}dk döngü=${w.cycle} boss=${w.bosses.killed} kill=${w.kills} sv=${w.level} düşman=${w.enemies.count} taş=${w.gems.count} yerdeXP=${Math.round(w.gems.totalValue())} altın=${Math.floor(w.gold)} elit=${w.eliteKills} hasarAlınan=${Math.round(hurt)} silah=${w.weapons.map((x) => x.def.id + x.level).join(',')}`,
+      `${Math.round(w.time / 60)}dk döngü=${w.cycle} boss=${w.bosses.killed} kill=${w.kills} sv=${w.level} düşman=${w.enemies.count} taş=${w.gems.count} yerdeXP=${Math.round(w.gems.totalValue())} altın=${Math.floor(w.gold)} sandık=${w.chestsOpened} pakt=${w.landmarks.pacts.length} elit=${w.eliteKills} hasarAlınan=${Math.round(hurt)} silah=${w.weapons.map((x) => x.def.id + x.level).join(',')}`,
     );
   });
   const deaths: string[] = [];

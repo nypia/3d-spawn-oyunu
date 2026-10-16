@@ -10,7 +10,13 @@ export type UpgradeOption =
   | { kind: 'weaponNew'; weapon: number }
   | { kind: 'weaponLevel'; weapon: number; toLevel: number; rarity: Rarity }
   | { kind: 'tome'; tome: number; toLevel: number; rarity: Rarity }
-  | { kind: 'heal'; amount: number };
+  | { kind: 'heal'; amount: number }
+  /** Her şey maksimumdayken: altın kesesi ya da kalıcı küçük hasar artışı (yığılır). */
+  | { kind: 'gold'; amount: number }
+  | { kind: 'essence'; rarity: Rarity };
+
+/** Güç Özü: nadirlik çarpanıyla bu kadar hasar artışı (0.02 = +%2). */
+export const ESSENCE_DAMAGE = 0.02;
 
 export interface UpgradeView {
   icon: string;
@@ -22,6 +28,13 @@ export interface UpgradeView {
   rarityName: string;
   /** Ek ipucu (maks seviye kartında evrim tarifi). */
   hint?: string;
+  /** Yasaklanabilir mi (yalnızca silah ve kitap kartları). */
+  banishable: boolean;
+}
+
+/** Yalnızca silah ve kitap kartları yasaklanır (iyileşme, altın ve öz her zaman gelebilir). */
+export function isBanishable(opt: UpgradeOption): boolean {
+  return opt.kind === 'weaponNew' || opt.kind === 'weaponLevel' || opt.kind === 'tome';
 }
 
 /** Yasaklama ve tekrar kontrolü için seçeneğin kimliği: "w:magicBolt", "t:power". */
@@ -33,7 +46,9 @@ export function upgradeKey(opt: UpgradeOption): string {
     case 'tome':
       return `t:${TOMES[opt.tome].id}`;
     case 'heal':
-      return 'heal';
+    case 'gold':
+    case 'essence':
+      return opt.kind;
   }
 }
 
@@ -103,7 +118,14 @@ export function rollUpgrades(
     result.push(opt);
     weights[idx] = 0;
   }
-  if (result.length < n && !exclude.has('heal')) result.push({ kind: 'heal', amount: 30 });
+  // Havuz tükendiyse (her şey maksimumda): iyileşme, güç özü, altın.
+  for (const kind of ['heal', 'essence', 'gold'] as const) {
+    if (result.length >= n) break;
+    if (exclude.has(kind)) continue;
+    if (kind === 'heal') result.push({ kind, amount: 30 });
+    else if (kind === 'essence') result.push({ kind, rarity: rollRarity(rng, luck) });
+    else result.push({ kind, amount: 20 + 2 * world.level });
+  }
   return result;
 }
 
@@ -120,6 +142,7 @@ export function describeUpgrade(opt: UpgradeOption, slots?: SlotUsage): UpgradeV
         description: d.description,
         rarity: null,
         rarityName: '',
+        banishable: true,
       };
     }
     case 'weaponLevel': {
@@ -134,6 +157,7 @@ export function describeUpgrade(opt: UpgradeOption, slots?: SlotUsage): UpgradeV
         description: describeDelta(d.levels[opt.toLevel - 2], rarityMult(opt.rarity)),
         rarity: opt.rarity,
         rarityName: RARITIES[opt.rarity].name,
+        banishable: true,
       };
     }
     case 'tome': {
@@ -150,6 +174,7 @@ export function describeUpgrade(opt: UpgradeOption, slots?: SlotUsage): UpgradeV
         description: d.describe(tomeValue(d, rarityMult(opt.rarity))),
         rarity: opt.rarity,
         rarityName: RARITIES[opt.rarity].name,
+        banishable: true,
       };
     }
     case 'heal':
@@ -160,6 +185,27 @@ export function describeUpgrade(opt: UpgradeOption, slots?: SlotUsage): UpgradeV
         description: `${opt.amount} can yenile`,
         rarity: null,
         rarityName: '',
+        banishable: false,
+      };
+    case 'gold':
+      return {
+        icon: '💰',
+        title: 'Altın Kesesi',
+        badge: 'ALTIN',
+        description: `+${opt.amount} altın`,
+        rarity: null,
+        rarityName: '',
+        banishable: false,
+      };
+    case 'essence':
+      return {
+        icon: '💠',
+        title: 'Güç Özü',
+        badge: 'KALICI',
+        description: `+%${(ESSENCE_DAMAGE * 100 * rarityMult(opt.rarity)).toFixed(1)} hasar (yığılır)`,
+        rarity: opt.rarity,
+        rarityName: RARITIES[opt.rarity].name,
+        banishable: false,
       };
   }
 }

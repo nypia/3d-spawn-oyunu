@@ -3,7 +3,44 @@ import { TOMES } from '../../src/data/tomes';
 import { HZF_VISUAL } from '../../src/sim/combat/Hazards';
 import type { PlayerInput } from '../../src/sim/player/Player';
 import type { UpgradeOption } from '../../src/sim/progression/Upgrades';
+import { ALTAR, CAULDRON, CHEST } from '../../src/sim/world/Interactables';
 import type { World } from '../../src/sim/world/World';
+
+/**
+ * Haritadaki hedef: bedava sandık (60 m) → parası yetiyorsa ücretli sandık (80 m) → sunak (50 m) →
+ * yarıdan fazla dolu kazanın yanı (40 m). Yoksa null (taş toplanır).
+ */
+function objective(world: World): [number, number] | null {
+  const it = world.interactables;
+  const p = world.player;
+  let best = -1;
+  let bd = Number.POSITIVE_INFINITY;
+  for (let i = 0; i < it.count; i++) {
+    if (it.used[i]) continue;
+    let limit = 0;
+    let rank = 0;
+    if (it.kind[i] === CHEST) {
+      if (it.free[i]) limit = 60;
+      else if (world.gold >= world.chestPrice) limit = 80;
+      rank = it.free[i] ? 0 : 1;
+    } else if (it.kind[i] === ALTAR && !it.level[i]) {
+      limit = 50;
+      rank = 2;
+    } else if (it.kind[i] === CAULDRON && it.charge[i] > 0.5 && it.cooldown[i] <= 0) {
+      limit = 40;
+      rank = 3;
+    }
+    const d2 = (it.x[i] - p.x) ** 2 + (it.z[i] - p.z) ** 2;
+    // Kazanın ruh menzilindeyse hedef sayılmaz: orada savaşmaya devam.
+    if (limit === 0 || d2 > limit * limit || (it.kind[i] === CAULDRON && d2 < 25)) continue;
+    const key = rank * 1e6 + d2;
+    if (key < bd) {
+      bd = key;
+      best = i;
+    }
+  }
+  return best >= 0 ? [it.x[best], it.z[best]] : null;
+}
 
 /** Kitap tercihleri: can ve saldırı önce, toplama/şans en son. */
 const TOME_SCORE: Record<string, number> = {
@@ -27,13 +64,17 @@ function score(world: World, o: UpgradeOption): number {
       return (TOME_SCORE[TOMES[o.tome].stat] ?? 1.2) + r;
     case 'heal':
       return world.player.hp < world.player.maxHp * 0.5 ? 3.2 : 0.3;
+    case 'essence':
+      return 1 + r;
+    case 'gold':
+      return 0.2;
   }
 }
 
 /**
  * Denge ölçümü için "makul oyuncu" botu: en yakın XP taşına gider, yakındaki düşmanlardan ve kırmızı
- * uyarı alanlarından uzaklaşır, ara ara zıplar; seviye atlamada dengeli bir yapı kurar (silah + can +
- * saldırı kitapları), ödülleri alır.
+ * uyarı alanlarından uzaklaşır, ara ara zıplar; sandık, sunak ve kazanlara gider; seviye atlamada
+ * dengeli bir yapı kurar (silah + can + saldırı kitapları), ödülleri alır (paktın ilkini seçer).
  */
 export function playBot(world: World, seconds: number, onMinute?: (w: World, hurt: number) => void): number {
   const dt = BALANCE.simStep;
@@ -54,7 +95,12 @@ export function playBot(world: World, seconds: number, onMinute?: (w: World, hur
     }
     let mx = Math.cos(t * 0.35);
     let mz = Math.sin(t * 0.35);
-    if (best >= 0) {
+    const goal = objective(world);
+    if (goal) {
+      const l = Math.hypot(goal[0] - p.x, goal[1] - p.z) || 1;
+      mx = (goal[0] - p.x) / l;
+      mz = (goal[1] - p.z) / l;
+    } else if (best >= 0) {
       const l = Math.sqrt(bd) || 1;
       mx = (g.x[best] - p.x) / l;
       mz = (g.z[best] - p.z) / l;

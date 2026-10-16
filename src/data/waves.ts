@@ -89,6 +89,12 @@ export const CYCLE = {
   eventCount: 1.4,
   /** Döngü başında spawn'sız sakin süre (s). */
   calm: 8,
+  /**
+   * Çizelge 20:00'ı geçince temalı olaylar bu andan (8:00) yeniden oynar, her geçişte
+   * `loopEventCount` kat kalabalık: Kan Ayı'nda ve finali öldürmeden süren koşuda olaylar bitmez.
+   */
+  loopFrom: 480,
+  loopEventCount: 1.25,
 };
 
 /** Çizelge zamanı `tl`'deki ağırlıkları `out`'a yazar (ENEMIES sırasıyla). */

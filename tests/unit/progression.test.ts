@@ -5,6 +5,7 @@ import { TOMES } from '../../src/data/tomes';
 import { WEAPONS } from '../../src/data/weapons';
 import {
   describeUpgrade,
+  isBanishable,
   rollUpgrades,
   slotUsage,
   type UpgradeOption,
@@ -92,5 +93,31 @@ describe('rollUpgrades', () => {
     expect(view.badge).toBe(`YENİ SİLAH · 3/${BALANCE.levelUp.weaponSlots}`);
     const tome = describeUpgrade({ kind: 'tome', tome: 0, toLevel: 1, rarity: 0 }, { weapons: 2, tomes: 3 });
     expect(tome.badge).toBe(`YENİ KİTAP · 4/${BALANCE.levelUp.tomeSlots}`);
+  });
+
+  it('her şey maksimumdayken can, güç özü ve altın gelir; yasaklanamazlar ve işe yarar', () => {
+    const world = new World({ seed: 9, enemyCap: 0 });
+    world.weapons.length = 0;
+    world.tomeLevels.fill(0);
+    // Silah yuvaları dolu ve maks, kitap yuvaları dolu ve maks.
+    for (let k = 0; k < BALANCE.levelUp.weaponSlots; k++) {
+      world.applyUpgrade({ kind: 'weaponNew', weapon: k });
+      const w = world.weapons[k];
+      while (w.level < w.def.levels.length + 1)
+        world.applyUpgrade({ kind: 'weaponLevel', weapon: k, toLevel: w.level + 1, rarity: 0 });
+    }
+    for (let k = 0; k < BALANCE.levelUp.tomeSlots; k++) world.tomeLevels[k] = TOMES[k].maxLevel;
+    const opts = rollUpgrades(world, new Rng(3));
+    expect(opts.map((o) => o.kind)).toEqual(['heal', 'essence', 'gold']);
+    for (const o of opts) {
+      expect(isBanishable(o)).toBe(false);
+      expect(describeUpgrade(o).banishable).toBe(false);
+    }
+    const dmg = world.stats.get('damage');
+    world.applyUpgrade(opts[1]);
+    expect(world.stats.get('damage')).toBeGreaterThan(dmg);
+    const gold = world.gold;
+    world.applyUpgrade(opts[2]);
+    expect(world.gold).toBeGreaterThan(gold);
   });
 });

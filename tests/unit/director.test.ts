@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { BALANCE } from '../../src/data/balance';
 import { ENEMIES, ENEMY_INDEX } from '../../src/data/enemies';
-import { WAVE_EVENTS, waveWeights } from '../../src/data/waves';
+import { CYCLE, WAVE_EVENTS, waveWeights } from '../../src/data/waves';
 import { NO_INPUT } from '../../src/sim/player/Player';
+import { ANN_EVENT } from '../../src/sim/world/announce';
 import { World } from '../../src/sim/world/World';
 
 const DT = BALANCE.simStep;
@@ -62,5 +63,46 @@ describe('spawn direktörü', () => {
     let n = 0;
     for (let i = 0; i < w.enemies.count; i++) if (w.enemies.type[i] === ENEMY_INDEX[ev.enemy]) n++;
     expect(n).toBeGreaterThanOrEqual(ev.count);
+  });
+
+  it("çizelge 20:00'ı geçince olaylar 8:00'dan yeniden ve daha kalabalık gelir", () => {
+    const w = new World({ seed: 4, godMode: true });
+    w.weapons.length = 0;
+    w.landmarks.goblinAt = 1e9;
+    w.bosses.next = 99;
+    const first = WAVE_EVENTS.findIndex((e) => e.at >= CYCLE.loopFrom);
+    const ev = WAVE_EVENTS[first];
+    w.time = CYCLE.length + 0.5;
+    w.step(NO_INPUT, DT);
+    const seen: [number, number][] = [];
+    w.announceFx.drain(0, (d, o) => {
+      if (d[o] === ANN_EVENT) seen.push([d[o + 1], d[o + 2]]);
+    });
+    expect(w.director.eventLoop).toBe(1);
+    expect(seen.map((x) => x[0])).toContain(first);
+    const n = seen.find((x) => x[0] === first)?.[1] ?? 0;
+    expect(n).toBeGreaterThan(ev.count);
+  });
+
+  it('Kan Ayı döngüsünde olaylar ~500 sn sonra da sürer', () => {
+    const w = new World({ seed: 6, godMode: true, enemyCap: 0 });
+    w.weapons.length = 0;
+    w.cycle = 2;
+    w.cycleStart = 1300;
+    w.time = 1300 + CYCLE.calm + 500;
+    w.director.startCycle(w);
+    w.director.calmUntil = 0;
+    w.enemyCap = 50;
+    const before = w.announceFx.written;
+    for (let t = 0; t < 30; t += DT) {
+      w.time += DT;
+      w.director.update(w, DT);
+      w.enemies.count = 0;
+    }
+    let events = 0;
+    w.announceFx.drain(before, (d, o) => {
+      if (d[o] === ANN_EVENT) events++;
+    });
+    expect(events).toBeGreaterThan(0);
   });
 });

@@ -5,7 +5,7 @@ import { PACTS } from '../../data/pacts';
 import { EF_BOSS, EF_NOLOOT, EF_SPECIAL, EF_SUMMON } from '../enemies/EnemyPool';
 import { PICKUP_BAG, PICKUP_GOLD } from '../pickups/PickupPool';
 import { ANN_CAULDRON, ANN_GOBLIN, ANN_GOBLIN_ESCAPE, ANN_PACT } from './announce';
-import { ALTAR as ALTAR_KIND, CAULDRON as CAULDRON_KIND } from './Interactables';
+import { ALTAR as ALTAR_KIND, CAULDRON as CAULDRON_KIND, CHEST as CHEST_KIND } from './Interactables';
 import type { World } from './World';
 
 /** goblinFx kodları: x,y,z,kod */
@@ -96,11 +96,16 @@ export class Landmarks {
     w.announceFx.push(ANN_PACT, pact, 0);
   }
 
-  /** Kan Ayı: kazanlar ve sunaklar yeniden kullanılabilir. */
+  /**
+   * Kan Ayı: kazanlar, sunaklar ve haritadaki ücretli sandıklar yeniden kullanılabilir (fiyat artmaya
+   * devam eder: geç oyunda da altının bir karşılığı olsun).
+   */
   rearm(w: World): void {
     const it = w.interactables;
     for (let i = 0; i < it.count; i++) {
-      if (it.kind[i] === ALTAR_KIND) {
+      if (it.kind[i] === CHEST_KIND && !it.free[i]) {
+        it.used[i] = 0;
+      } else if (it.kind[i] === ALTAR_KIND) {
         it.used[i] = 0;
         it.level[i] = 0;
       } else if (it.kind[i] === CAULDRON_KIND) {

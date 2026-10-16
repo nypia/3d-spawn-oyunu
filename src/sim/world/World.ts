@@ -45,7 +45,13 @@ import {
 } from '../pickups/PickupPool';
 import { Player, type PlayerInput } from '../player/Player';
 import { type Rarity, rarityMult, rollRarity } from '../progression/Rarity';
-import { rollUpgrades, type UpgradeOption, upgradeKey } from '../progression/Upgrades';
+import {
+  ESSENCE_DAMAGE,
+  isBanishable,
+  rollUpgrades,
+  type UpgradeOption,
+  upgradeKey,
+} from '../progression/Upgrades';
 import { SpatialGrid } from '../spatial/SpatialGrid';
 import { Stats } from '../stats/Stats';
 import { Heightmap } from '../terrain/Heightmap';
@@ -367,7 +373,7 @@ export class World {
   /** Kartı yasaklar: o silah/kitap bu run boyunca bir daha çıkmaz; yerine yeni kart gelir. */
   banish(index: number): boolean {
     const opt = this.offer?.[index];
-    if (!this.offer || !opt || opt.kind === 'heal' || this.banishes <= 0) return false;
+    if (!this.offer || !opt || !isBanishable(opt) || this.banishes <= 0) return false;
     this.banishes--;
     this.banished.add(upgradeKey(opt));
     const others = new Set(this.offer.filter((_, i) => i !== index).map(upgradeKey));
@@ -417,6 +423,12 @@ export class World {
       }
       case 'heal':
         this.heal(opt.amount);
+        break;
+      case 'gold':
+        this.gold += opt.amount;
+        break;
+      case 'essence':
+        this.stats.addMult('damage', ESSENCE_DAMAGE * rarityMult(opt.rarity));
         break;
     }
   }

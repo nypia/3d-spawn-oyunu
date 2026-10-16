@@ -50,6 +50,11 @@ export interface BossDef {
   enemy: string;
   /** 1. döngüde doğduğu an (s). */
   at: number;
+  /**
+   * Kan Ayı döngülerinde doğduğu an: döngü başı + sakinlik + bu kadar (s). Final, çizelgenin 20:00
+   * karışımına ulaştığı ana (≈8 dk) denk gelir: Kan Ayı döngüleri kısa ve yoğundur.
+   */
+  bloodAt: number;
   attacks: BossAttack[];
   /** Can bu oranın altına inince eklenen saldırılar. */
   enrage?: { at: number; attacks: BossAttack[] };
@@ -84,7 +89,7 @@ export const BOSS = {
   finalChestMinRarity: 2,
   /** Tespih boss'tan canının bu kadarını alır. */
   rosaryFrac: 0.08,
-  /** Doğum anı bu kadar geçmişte kaldıysa (ör. hile ile zaman atlandı) boss atlanır. */
+  /** Doğum anı bu kadar geçmişte kaldıysa (yalnızca hile ile zaman atlanınca olur) boss atlanır. */
   staleSkip: 30,
   /** İki boss arasında en az bu kadar (s). */
   minGap: 120,
@@ -98,6 +103,7 @@ export const BOSSES: readonly BossDef[] = [
     title: 'Bataklığın efendisi',
     enemy: 'slimeKing',
     at: 300,
+    bloodAt: 90,
     color: 0x6fd35a,
     attacks: [
       { kind: 'hopSlam', cooldown: 6, radius: 3.6, damage: 24, air: 0.9 },
@@ -111,6 +117,7 @@ export const BOSSES: readonly BossDef[] = [
     title: 'Gecenin avcısı',
     enemy: 'vampireLord',
     at: 600,
+    bloodAt: 210,
     color: 0xd03a50,
     attacks: [
       { kind: 'dashChain', cooldown: 7, dashes: 3, windup: 0.5, speed: 18, time: 0.45 },
@@ -124,6 +131,7 @@ export const BOSSES: readonly BossDef[] = [
     title: 'Dağların öfkesi',
     enemy: 'stoneGiant',
     at: 900,
+    bloodAt: 330,
     color: 0x8fa6c8,
     attacks: [
       { kind: 'slam', cooldown: 5, radius: 5.5, damage: 34, windup: 0.9, range: 6 },
@@ -136,6 +144,7 @@ export const BOSSES: readonly BossDef[] = [
     title: 'Mezarlığın hükümdarı',
     enemy: 'boneKing',
     at: 1200,
+    bloodAt: 480,
     color: 0xf2e6c8,
     final: true,
     attacks: [

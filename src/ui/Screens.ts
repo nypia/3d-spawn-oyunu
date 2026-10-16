@@ -187,7 +187,7 @@ export class Screens {
       if (o.rarityName) card.append(h('span.card-rarity', {}, o.rarityName));
       if (o.hint) card.append(h('span.card-hint', {}, `★ ${o.hint}`));
       card.addEventListener('click', () => actions.pick(i));
-      if (charges.banishes > 0 && o.badge !== 'İYİLEŞME') {
+      if (charges.banishes > 0 && o.banishable) {
         const ban = h(
           'span.card-ban',
           { role: 'button', 'aria-label': `${o.title} kartını yasakla`, 'data-testid': `ban-${i}` },

@@ -3,6 +3,7 @@ import { BALANCE } from '../../src/data/balance';
 import { ATTACK_KINDS, BOSS, BOSSES } from '../../src/data/bosses';
 import { CHEST_BOSS } from '../../src/data/chests';
 import { ENEMIES, ENEMY_INDEX } from '../../src/data/enemies';
+import { CYCLE } from '../../src/data/waves';
 import { HZ_CIRCLE, HZ_GLOB, HZ_LINE } from '../../src/sim/combat/Hazards';
 import { EF_BOSS, EF_SUMMON } from '../../src/sim/enemies/EnemyPool';
 import { NO_INPUT } from '../../src/sim/player/Player';
@@ -35,6 +36,11 @@ function bossIndex(w: World): number {
 describe('boss tanımları', () => {
   it('dört boss, sıralı zamanlar, son boss final; her biri bir boss türü', () => {
     expect(BOSSES.map((b) => b.at)).toEqual([300, 600, 900, 1200]);
+    // Kan Ayı: sıralı, aralar en az minGap; final çizelgenin 20:00'a vardığı anda.
+    const blood = BOSSES.map((b) => b.bloodAt);
+    for (let k = 1; k < blood.length; k++)
+      expect(blood[k] - blood[k - 1]).toBeGreaterThanOrEqual(BOSS.minGap);
+    expect(blood[blood.length - 1]).toBe((CYCLE.length - CYCLE.timelineStart) / CYCLE.pace);
     expect(BOSSES.filter((b) => b.final)).toHaveLength(1);
     expect(BOSSES[BOSSES.length - 1].final).toBe(true);
     for (const b of BOSSES) {

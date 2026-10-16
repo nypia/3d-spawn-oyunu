@@ -1,6 +1,7 @@
 import { ATTACK_KINDS, BOSS, BOSSES, type BossAttack, type BossDef } from '../../data/bosses';
 import { CHEST_BOSS } from '../../data/chests';
 import { ENEMY_INDEX, SHOT_ORB } from '../../data/enemies';
+import { CYCLE } from '../../data/waves';
 import { HZ_BOULDER, HZ_CIRCLE, HZ_GLOB, HZ_LINE, HZF_VISUAL } from '../combat/Hazards';
 import { PICKUP_GOLD } from '../pickups/PickupPool';
 import { ANN_BOSS_DEAD, ANN_BOSS_SPAWN, ANN_BOSS_WARN } from '../world/announce';
@@ -51,11 +52,15 @@ export class BossController {
     this.warned = false;
   }
 
-  /** Sıradaki boss'un doğacağı an: döngü başına 20 dk'lık takvim, iki boss arası en az `minGap`. */
+  /**
+   * Sıradaki boss'un doğacağı an: 1. döngüde 5/10/15/20. dakika; Kan Ayı'nda döngünün başlangıcına
+   * göre (`bloodAt`), böylece final geç öldürülse de hiçbir boss atlanmaz. İki boss arası en az `minGap`.
+   */
   dueAt(world: World): number {
     const def = BOSSES[this.next];
     if (!def) return Number.POSITIVE_INFINITY;
-    return Math.max((world.cycle - 1) * 1200 + def.at, this.lastSpawnAt + BOSS.minGap);
+    const at = world.cycle <= 1 ? def.at : world.cycleStart + CYCLE.calm + def.bloodAt;
+    return Math.max(at, this.lastSpawnAt + BOSS.minGap);
   }
 
   update(world: World): void {

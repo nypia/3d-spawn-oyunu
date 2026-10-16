@@ -5,8 +5,8 @@ import { ENEMY_INDEX } from '../../src/data/enemies';
 import { CYCLE } from '../../src/data/waves';
 import { EF_BOSS } from '../../src/sim/enemies/EnemyPool';
 import { NO_INPUT } from '../../src/sim/player/Player';
-import { ANN_BLOOD_MOON } from '../../src/sim/world/announce';
-import { ALTAR } from '../../src/sim/world/Interactables';
+import { ANN_BLOOD_MOON, ANN_BOSS_SPAWN } from '../../src/sim/world/announce';
+import { ALTAR, CHEST } from '../../src/sim/world/Interactables';
 import { World } from '../../src/sim/world/World';
 
 const DT = BALANCE.simStep;
@@ -65,12 +65,13 @@ describe('Kan Ayı', () => {
     }
   });
 
-  it('sonraki boss en erken 25:00, final 40:00; yeni düşmanlar daha güçlü', () => {
+  it("boss'lar döngü başına göre gelir (final ~8 dk sonra); yeni düşmanlar daha güçlü", () => {
     const w = killFinal();
     expect(w.bosses.next).toBe(0);
-    expect(w.bosses.dueAt(w)).toBeGreaterThanOrEqual(1500);
+    const start = w.cycleStart + CYCLE.calm;
+    expect(w.bosses.dueAt(w)).toBeGreaterThanOrEqual(start + BOSSES[0].bloodAt);
     w.bosses.next = BOSSES.length - 1;
-    expect(w.bosses.dueAt(w)).toBeGreaterThanOrEqual(2400);
+    expect(w.bosses.dueAt(w)).toBeCloseTo(start + BOSSES[BOSSES.length - 1].bloodAt);
     const strong = w.enemies.maxHp[w.spawnEnemy(ENEMY_INDEX.skeleton, 50, 50)];
     w.cycle = 1;
     const normal = w.enemies.maxHp[w.spawnEnemy(ENEMY_INDEX.skeleton, 52, 50)];
@@ -89,5 +90,43 @@ describe('Kan Ayı', () => {
     expect(w.enemies.count).toBeGreaterThan(before);
     // Sakinlik bitince çizelge ilerlemeye başlar (1,5 kat hızla).
     expect(w.director.timelineTime(w)).toBeGreaterThan(CYCLE.timelineStart + 2);
+  });
+
+  it('final geç öldürülse de (31:40) Kanlı Balçık Kral atlanmaz', () => {
+    const w = new World({ seed: 22, enemyCap: 0, godMode: true });
+    w.weapons.length = 0;
+    w.landmarks.goblinAt = 1e9;
+    w.time = 1900;
+    w.bosses.next = BOSSES.length - 1;
+    w.step(NO_INPUT, DT);
+    let b = -1;
+    for (let i = 0; i < w.enemies.count; i++) if (w.enemies.flags[i] & EF_BOSS) b = i;
+    w.damageEnemy(b, 1e12, 0, 0);
+    expect(w.cycle).toBe(2);
+    w.enemies.removeDead();
+    // Döngü başına göre (ve iki boss arası en az minGap) doğar; geç kalınca atlanmaz.
+    const due = w.bosses.dueAt(w);
+    expect(due).toBeGreaterThanOrEqual(w.cycleStart + CYCLE.calm + BOSSES[0].bloodAt);
+    while (w.time < due + 0.5) w.step(NO_INPUT, DT);
+    const spawned: number[] = [];
+    w.announceFx.drain(0, (d, o) => {
+      if (d[o] === ANN_BOSS_SPAWN) spawned.push(d[o + 1]);
+    });
+    expect(spawned).toContain(0);
+  });
+
+  it('Kan Ayı açılmış ücretli sandıkları yeniden açar (bedava sandıklar değil)', () => {
+    const w = new World({ seed: 23, enemyCap: 0 });
+    const it = w.interactables;
+    const paid: number[] = [];
+    for (let i = 0; i < it.count; i++) {
+      if (it.kind[i] === CHEST && !it.free[i]) {
+        it.used[i] = 1;
+        paid.push(i);
+      }
+    }
+    expect(paid.length).toBeGreaterThan(0);
+    w.startBloodMoon();
+    for (const i of paid) expect(it.used[i]).toBe(0);
   });
 });
